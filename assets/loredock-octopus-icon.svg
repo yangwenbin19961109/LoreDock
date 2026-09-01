@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title description">
+  <title id="title">LoreDock octopus icon</title>
+  <description id="description">A three-face blue origami octopus representing a local knowledge core connected to many AI agents.</description>
+  <path fill="#2563EB" d="M400 500 340 570 225 595 145 680 215 750 340 700 420 630 390 720 330 800 400 850 475 735 485 680 480 820 512 900 544 820 539 680 549 735 624 850 694 800 634 720 604 630 684 700 809 750 879 680 799 595 684 570 624 500Z"/>
+  <path fill="#60A5FA" d="M420 180 604 180 690 270 690 390 620 500 512 560 380 500 334 390 334 270Z"/>
+  <path fill="#1E40AF" d="M380 500 690 330 690 390 620 500 512 560Z"/>
+  <path fill="#3B82F6" d="M145 680 225 595 215 750Z"/>
+  <path fill="#1D4ED8" d="M225 595 340 570 340 700 215 750Z"/>
+  <path fill="#3B82F6" d="M390 720 330 800 400 850Z"/>
+  <path fill="#1E3A8A" d="M480 820 512 690 512 900Z"/>
+  <path fill="#1D4ED8" d="M634 720 694 800 624 850Z"/>
+  <path fill="#1D4ED8" d="M799 595 684 570 684 700 809 750Z"/>
+  <path fill="#3B82F6" d="M879 680 799 595 809 750Z"/>
+</svg>

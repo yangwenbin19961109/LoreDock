@@ -1,0 +1,96 @@
+export const API_VERSION = 'v1' as const
+export const CORE_VERSION = '0.1.0' as const
+
+export type ApiVersion = typeof API_VERSION
+
+export interface HealthResponse {
+  readonly status: 'ok'
+  readonly service: 'loredock-core'
+  readonly version: string
+  readonly api_version: ApiVersion
+}
+
+export interface VersionResponse {
+  readonly product: 'LoreDock'
+  readonly core_version: string
+  readonly api_version: ApiVersion
+}
+
+export interface ErrorDetail {
+  readonly code: string
+  readonly message: string
+  readonly request_id?: string
+  readonly fields?: Readonly<Record<string, readonly string[]>>
+}
+
+export interface ErrorResponse {
+  readonly error: ErrorDetail
+}
+
+export interface PageInfo {
+  readonly limit: number
+  readonly next_cursor?: string
+}
+
+export interface Page<T> {
+  readonly items: readonly T[]
+  readonly page: PageInfo
+}
+
+export type LibraryId = string & { readonly __brand: 'LibraryId' }
+export type SourceId = string & { readonly __brand: 'SourceId' }
+export type ChunkId = string & { readonly __brand: 'ChunkId' }
+export type JobId = string & { readonly __brand: 'JobId' }
+
+export interface Library {
+  readonly id: LibraryId
+  readonly name: string
+  readonly created_at: string
+  readonly updated_at: string
+}
+
+export interface Source {
+  readonly id: SourceId
+  readonly library_id: LibraryId
+  readonly name: string
+  readonly media_type: string
+  readonly status: string
+  readonly content_hash: string
+  readonly size_bytes: number
+  readonly error: string | null
+  readonly created_at: string
+  readonly updated_at: string
+}
+
+export interface Job {
+  readonly id: JobId
+  readonly library_id: LibraryId
+  readonly source_id: SourceId | null
+  readonly kind: string
+  readonly status: string
+  readonly attempts: number
+  readonly progress: number
+  readonly error: string | null
+  readonly created_at: string
+  readonly updated_at: string
+}
+
+export interface SearchResult {
+  readonly chunk_id: ChunkId
+  readonly source_id: SourceId
+  readonly text: string
+  readonly score: number
+  readonly char_start: number
+  readonly char_end: number
+  readonly page: number | null
+  readonly title_path: readonly string[]
+}
+
+export interface SearchRequest {
+  readonly query: string
+  readonly limit?: number
+  readonly lexical_only?: boolean
+}
+
+export const coreEndpoint = (path: string): string =>
+  `/api/${API_VERSION}/${path.replace(/^\//, '')}`

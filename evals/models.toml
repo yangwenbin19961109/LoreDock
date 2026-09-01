@@ -1,0 +1,22 @@
+schema_version = 1
+
+[[models]]
+id = "intfloat/multilingual-e5-small"
+revision = "main"
+license = "MIT"
+dimensions = 384
+query_prefix = "query: "
+document_prefix = "passage: "
+candidate_artifact = "onnx/model_qint8_avx512_vnni.onnx"
+candidate_artifact_bytes = 118000000
+status = "candidate"
+
+[[models]]
+id = "BAAI/bge-m3"
+revision = "main"
+license = "MIT"
+dimensions = 1024
+query_prefix = ""
+document_prefix = ""
+candidate_artifact = "onnx/model.onnx"
+status = "candidate-too-large-for-default"

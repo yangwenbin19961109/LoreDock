@@ -1,0 +1,31 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "LoreDock",
+  "version": "0.1.0",
+  "identifier": "app.loredock.desktop",
+  "build": {
+    "beforeDevCommand": "pnpm --dir ../.. --filter @loredock/web dev",
+    "beforeBuildCommand": "pnpm --dir ../.. --filter @loredock/web build",
+    "devUrl": "http://127.0.0.1:1420",
+    "frontendDist": "../../web/dist"
+  },
+  "app": {
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost; style-src 'self' 'unsafe-inline'; connect-src 'self' http://127.0.0.1:49321"
+    },
+    "windows": [
+      {
+        "title": "LoreDock",
+        "width": 1280,
+        "height": 820,
+        "minWidth": 960,
+        "minHeight": 640,
+        "center": true,
+        "resizable": true
+      }
+    ]
+  },
+  "bundle": {
+    "active": false
+  }
+}

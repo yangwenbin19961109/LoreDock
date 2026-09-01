@@ -1,0 +1,85 @@
+:root {
+  color-scheme: light;
+  font-family: Inter, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', system-ui, sans-serif;
+
+  --ld-color-background: #f7f8fc;
+  --ld-color-surface: #ffffff;
+  --ld-color-surface-muted: #f1f4fa;
+  --ld-color-primary: #2563eb;
+  --ld-color-primary-hover: #1d4ed8;
+  --ld-color-primary-soft: #eff6ff;
+  --ld-color-text: #172033;
+  --ld-color-text-muted: #64748b;
+  --ld-color-border: #e2e8f0;
+  --ld-color-success: #16a34a;
+  --ld-color-warning: #d97706;
+  --ld-color-danger: #dc2626;
+
+  --ld-radius-control: 8px;
+  --ld-radius-card: 10px;
+  --ld-radius-dialog: 12px;
+  --ld-shadow-popover: 0 12px 32px rgb(23 32 51 / 12%);
+
+  --ld-space-1: 4px;
+  --ld-space-2: 8px;
+  --ld-space-3: 12px;
+  --ld-space-4: 16px;
+  --ld-space-5: 20px;
+  --ld-space-6: 24px;
+  --ld-space-8: 32px;
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+  --ld-color-background: #0b1020;
+  --ld-color-surface: #111827;
+  --ld-color-surface-muted: #172033;
+  --ld-color-primary: #3b82f6;
+  --ld-color-primary-hover: #60a5fa;
+  --ld-color-primary-soft: #172554;
+  --ld-color-text: #e5e7eb;
+  --ld-color-text-muted: #94a3b8;
+  --ld-color-border: #263247;
+  --ld-color-success: #22c55e;
+  --ld-color-warning: #f59e0b;
+  --ld-color-danger: #f87171;
+}
+
+.ld-button {
+  min-height: 36px;
+  padding: 0 var(--ld-space-4);
+  border: 1px solid transparent;
+  border-radius: var(--ld-radius-control);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.ld-button:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--ld-color-primary) 28%, transparent);
+  outline-offset: 2px;
+}
+
+.ld-button--primary {
+  color: white;
+  background: var(--ld-color-primary);
+}
+
+.ld-button--primary:hover {
+  background: var(--ld-color-primary-hover);
+}
+
+.ld-button--secondary {
+  color: var(--ld-color-text);
+  background: var(--ld-color-surface);
+  border-color: var(--ld-color-border);
+}
+
+.ld-button--ghost {
+  color: var(--ld-color-text-muted);
+  background: transparent;
+}

@@ -1,0 +1,119 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  color: var(--ld-color-text);
+  background:
+    radial-gradient(circle at 50% 20%, rgb(219 234 254 / 70%), transparent 34rem),
+    var(--ld-color-background);
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+.welcome-shell {
+  display: grid;
+  min-height: 100vh;
+  padding: var(--ld-space-8);
+  place-items: center;
+}
+
+.welcome-card {
+  width: min(620px, 100%);
+  padding: 48px;
+  text-align: center;
+  background: color-mix(in srgb, var(--ld-color-surface) 94%, transparent);
+  border: 1px solid var(--ld-color-border);
+  border-radius: 20px;
+  box-shadow: 0 24px 72px rgb(23 32 51 / 10%);
+}
+
+.brand-mark {
+  width: 88px;
+  height: 88px;
+  object-fit: contain;
+}
+
+.eyebrow {
+  margin: var(--ld-space-5) 0 var(--ld-space-2);
+  color: var(--ld-color-primary);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+}
+
+h1 {
+  max-width: 520px;
+  margin: 0 auto;
+  font-size: clamp(30px, 5vw, 44px);
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+}
+
+.welcome-copy {
+  max-width: 500px;
+  margin: var(--ld-space-5) auto;
+  color: var(--ld-color-text-muted);
+  line-height: 1.7;
+}
+
+.core-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ld-space-2);
+  padding: var(--ld-space-2) var(--ld-space-3);
+  color: var(--ld-color-text-muted);
+  background: var(--ld-color-surface-muted);
+  border-radius: 999px;
+  font-size: 13px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--ld-color-warning);
+  border-radius: 50%;
+}
+
+.core-status--ready .status-dot {
+  background: var(--ld-color-success);
+}
+
+.core-status--offline .status-dot {
+  background: var(--ld-color-danger);
+}
+
+.welcome-actions {
+  display: flex;
+  justify-content: center;
+  gap: var(--ld-space-3);
+  margin-top: var(--ld-space-6);
+}
+
+.phase-note {
+  margin: var(--ld-space-4) 0 0;
+  color: var(--ld-color-text-muted);
+  font-size: 12px;
+}
+
+@media (max-width: 560px) {
+  .welcome-shell {
+    padding: var(--ld-space-4);
+  }
+
+  .welcome-card {
+    padding: var(--ld-space-8) var(--ld-space-5);
+  }
+
+  .welcome-actions {
+    flex-direction: column;
+  }
+}

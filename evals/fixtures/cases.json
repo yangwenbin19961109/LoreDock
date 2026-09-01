@@ -1,0 +1,86 @@
+[
+  {
+    "id": "local-001",
+    "query": "没有网络还能全文搜索吗？",
+    "expected_sources": ["local-first"],
+    "expected_passages": ["即使没有网络连接，全文检索仍然可以工作"],
+    "tags": ["zh", "local-first"]
+  },
+  {
+    "id": "local-002",
+    "query": "服务默认监听在哪里？",
+    "expected_sources": ["local-first"],
+    "expected_passages": ["回环地址"],
+    "tags": ["zh", "security"]
+  },
+  {
+    "id": "search-001",
+    "query": "RRF 的默认 K 值是多少？",
+    "expected_sources": ["hybrid-search"],
+    "expected_passages": ["默认 RRF K 为 60"],
+    "tags": ["zh", "retrieval"]
+  },
+  {
+    "id": "search-002",
+    "query": "向量模型坏了搜索是否还能工作？",
+    "expected_sources": ["hybrid-search"],
+    "expected_passages": ["BM25-only"],
+    "tags": ["zh", "fallback"]
+  },
+  {
+    "id": "search-003",
+    "query": "全文和向量结果如何合并排名？",
+    "expected_sources": ["hybrid-search"],
+    "expected_passages": ["Reciprocal Rank Fusion"],
+    "tags": ["zh", "retrieval"]
+  },
+  {
+    "id": "citation-001",
+    "query": "搜索结果如何定位到原文？",
+    "expected_sources": ["citations"],
+    "expected_passages": ["字符起止范围"],
+    "tags": ["zh", "citation"]
+  },
+  {
+    "id": "citation-002",
+    "query": "什么内容是事实来源？",
+    "expected_sources": ["citations", "english"],
+    "expected_passages": ["原始资料是事实来源"],
+    "tags": ["zh", "source-of-truth"]
+  },
+  {
+    "id": "agent-001",
+    "query": "可以连接哪些 Agent？",
+    "expected_sources": ["agents"],
+    "expected_passages": ["Codex、Cursor"],
+    "tags": ["zh", "mcp"]
+  },
+  {
+    "id": "agent-002",
+    "query": "远程 MCP 需要哪些安全措施？",
+    "expected_sources": ["agents"],
+    "expected_passages": ["HTTPS 和身份认证"],
+    "tags": ["zh", "security"]
+  },
+  {
+    "id": "en-001",
+    "query": "Which desktop operating systems are supported?",
+    "expected_sources": ["english"],
+    "expected_passages": ["Windows, macOS, and Linux"],
+    "tags": ["en", "platform"]
+  },
+  {
+    "id": "en-002",
+    "query": "Are mobile applications included?",
+    "expected_sources": ["english"],
+    "expected_passages": ["outside the project scope"],
+    "tags": ["en", "scope"]
+  },
+  {
+    "id": "en-003",
+    "query": "Can search indexes be rebuilt?",
+    "expected_sources": ["english", "citations"],
+    "expected_passages": ["search indexes are rebuildable"],
+    "tags": ["en", "index"]
+  }
+]

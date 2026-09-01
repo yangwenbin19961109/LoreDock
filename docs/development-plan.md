@@ -1,0 +1,359 @@
+# LoreDock 分阶段开发计划
+
+## 1. 计划目标
+
+本计划用于指导 LoreDock 从空仓库发展为可发布产品。开发范围包括：
+
+- Windows、macOS、Linux 桌面端。
+- Docker 服务器端和浏览器 Web 管理界面。
+- 本地与远程 MCP 接入。
+- 本地优先的资料管理、混合检索和精确引用。
+
+移动端不在产品范围内。
+
+计划遵循以下顺序：先验证最难且最影响产品价值的检索能力，再实现用户体验，最后增加远程部署和发布能力。任何阶段都不能以破坏原始资料、引用定位或 BM25 降级能力为代价。
+
+## 2. 总体阶段
+
+| 阶段 | 目标 | 建议周期 | 主要产物 |
+|---|---|---:|---|
+| Phase 0 | 工程基础与契约 | 1～2 周 | Monorepo、CI、API/数据契约、ADR |
+| Phase 1 | 检索实验与评测基线 | 2～3 周 | 评测集、解析/分块原型、性能报告 |
+| Phase 2 | LoreDock Core MVP | 4～6 周 | 知识库、来源、任务、索引、搜索 API |
+| Phase 3 | 桌面端 MVP | 4～6 周 | Tauri 桌面应用、资料管理和搜索 UI |
+| Phase 4 | MCP 与 Agent 接入 | 2～4 周 | MCP Server、连接向导、Codex/Cursor 验证 |
+| Phase 5 | 完整资料处理能力 | 3～5 周 | 更多格式、URL、OCR 可选组件、文件夹监听 |
+| Phase 6 | 服务器与 Web 版本 | 4～6 周 | Docker、认证、远程 MCP、Web 管理端 |
+| Phase 7 | 稳定性、安全与发布 | 3～5 周 | 安装包、升级、备份恢复、安全测试、首发版本 |
+
+单人持续开发预计 7～10 个月形成稳定首发版本；2～3 名有经验的开发者可并行压缩到约 4～6 个月。周期不包含代码签名、商业模型授权或应用商店审核产生的外部等待时间。
+
+## 3. Phase 0：工程基础与契约
+
+### 3.1 目标
+
+建立后续开发不会频繁推翻的目录、工具链、数据边界和自动化质量门禁。
+
+### 3.2 工作项
+
+1. 建立 Monorepo：
+
+   ```text
+   apps/
+   ├── desktop/          # Tauri 2
+   └── web/              # React UI
+   packages/
+   ├── ui/               # 共享组件与设计 Token
+   └── contracts/        # HTTP/MCP 契约与生成类型
+   core/                 # Python LoreDock Core
+   evals/                # 检索评测数据和脚本
+   scripts/              # 构建、打包、迁移辅助脚本
+   docs/
+   ```
+
+2. 确定工具链：
+   - Python：`uv`、Ruff、Pyright、Pytest。
+   - Web：pnpm、TypeScript strict、ESLint、Prettier、Vitest。
+   - 端到端测试：Playwright。
+   - Rust/Tauri：Cargo、rustfmt、Clippy。
+3. 建立 CI：格式检查、静态检查、单元测试、构建验证、依赖许可证扫描。
+4. 建立首批 ADR：
+   - Python Core + Tauri sidecar。
+   - 每个知识库独立 SQLite 索引。
+   - FTS5 + sqlite-vec + RRF。
+   - 原始资料为事实来源，索引可重建。
+5. 定义 HTTP API 版本策略、统一错误结构和分页结构。
+6. 定义领域实体初稿：Library、Source、Artifact、Chunk、Job、ModelProfile。
+7. 将 UI 配色、字体、圆角、间距和状态颜色固化为设计 Token。
+
+### 3.3 验收条件
+
+- 新环境可通过一条文档化命令安装全部开发依赖。
+- Python、React 和 Tauri 最小应用可以分别启动。
+- CI 在 Windows、macOS、Linux 至少完成基础构建验证。
+- API 和数据结构变更有明确版本规则。
+- 不需要安装外部数据库、Redis 或系统级模型服务。
+
+## 4. Phase 1：检索实验与评测基线
+
+### 4.1 目标
+
+在开发完整产品前验证 LoreDock 的核心价值：中文和多语言资料能否被快速、准确地找到并引用。
+
+### 4.2 工作项
+
+1. 收集不含敏感信息的测试资料：Markdown、TXT、PDF、DOCX。
+2. 建立 200～500 个问题的评测集，记录期望来源、段落和允许答案。
+3. 实现最小解析器和结构感知分块原型。
+4. 对比初始分块参数：
+   - 目标 512 tokens。
+   - 最大 768 tokens。
+   - 重叠 64 tokens。
+5. 对比模型：
+   - multilingual-e5-small INT8 ONNX。
+   - BGE-M3 或同级候选。
+6. 实现 FTS5、sqlite-vec、RRF 和可选 Reranker 实验管线。
+7. 测试 1 万、10 万、50 万分块下的索引速度、查询延迟、内存和磁盘占用。
+8. 固化首个检索基线：
+   - BM25 候选 50。
+   - 向量候选 50。
+   - RRF K = 60。
+   - Reranker 输入 20。
+   - 最终结果 8。
+
+### 4.3 质量目标
+
+| 指标 | 初始目标 |
+|---|---:|
+| Recall@10 | ≥ 0.85 |
+| 首条正确结果比例 | ≥ 0.70 |
+| 1 万分块搜索 P95 | ≤ 1 秒 |
+| 引用来源正确率 | ≥ 0.98 |
+| 无 Embedding 时 BM25 | 可独立完成搜索 |
+
+所有延迟指标必须同时记录测试设备、模型、向量维度和数据规模。
+
+### 4.4 验收条件
+
+- 评测可在本地和 CI 中重复运行。
+- 模型和参数选择有数据支持，而不是仅依赖公开排行榜。
+- 每个结果能定位到来源、页码或字符范围。
+- 形成一份检索基准报告并更新技术架构中的最终参数。
+
+## 5. Phase 2：LoreDock Core MVP
+
+### 5.1 目标
+
+实现不依赖 UI 的完整知识库核心，使其可通过 HTTP API 创建知识库、导入资料、建立索引并检索。
+
+### 5.2 领域与存储
+
+- `app.sqlite`：知识库、来源、模型配置、任务摘要和设置。
+- `libraries/{library_id}/raw/`：原始资料或可信副本。
+- `libraries/{library_id}/artifacts/`：解析后的 Markdown、页面和衍生物。
+- `libraries/{library_id}/index.sqlite`：Chunk、FTS5、Embedding 和检索元数据。
+- `manifest.json`：模型、维度、分块、规范化和 schema 构建契约。
+
+### 5.3 工作项
+
+1. Library CRUD 和数据目录生命周期。
+2. Source 导入、复制、内容 hash、冲突检测和删除。
+3. Markdown、TXT、PDF、DOCX 解析。
+4. 结构化分块和稳定引用定位。
+5. EmbeddingProvider、Reranker、VectorIndex 接口。
+6. SQLite FTS5 和 sqlite-vec 实现。
+7. 混合搜索、过滤、RRF、相邻块扩展和去重。
+8. SQLite 持久化 Job Queue：
+   - 租约与 heartbeat。
+   - 有限重试。
+   - 崩溃恢复。
+   - 进度与可理解错误。
+9. 单来源原子重建，避免混合新旧索引。
+10. `/api/v1` HTTP API、OpenAPI 文档和契约测试。
+11. BM25-only 模式和模型不可用降级。
+
+### 5.4 验收条件
+
+- 完全通过 API 完成创建、导入、索引、搜索、读取和删除闭环。
+- 相同文件重复导入不会重复生成相同向量。
+- Core 异常退出后任务可恢复或明确失败，不会永久卡住。
+- 删除来源后原件副本、衍生物、FTS 和向量同步清理。
+- 更换模型或分块契约时可以后台重建并安全切换索引。
+- 单元、集成、迁移和 API 契约测试通过。
+
+## 6. Phase 3：桌面端 MVP
+
+### 6.1 目标
+
+把 Core 能力包装成普通用户无需命令行即可使用的桌面产品。
+
+### 6.2 页面范围
+
+1. 首次启动和数据目录初始化。
+2. 首页与全部知识库。
+3. 创建、重命名和删除知识库。
+4. 主知识库三栏页面：导航、资料列表、预览详情。
+5. 拖放和文件选择导入。
+6. 全局搜索和库内搜索。
+7. 任务进度、失败原因和重试。
+8. 模型管理与下载。
+9. 常规设置和高级设置。
+
+视觉实现以 `assets/mockups/loredock-main-library-ui-v1.png` 为方向参考，以设计 Token 和可访问性规范为最终实现依据。
+
+### 6.3 工程工作
+
+- Tauri 启动、停止和监控 Python sidecar。
+- 动态端口、健康检查和版本握手。
+- 系统钥匙串和安全配置。
+- 本地文件选择、拖放、打开来源位置。
+- 自动恢复 Core，但避免无限重启。
+- 键盘操作、焦点管理、空状态、加载状态和错误状态。
+- 明亮/深色主题。
+
+### 6.4 验收条件
+
+- 新用户不使用命令行即可完成知识库闭环。
+- Core 未启动、模型缺失、磁盘不足和索引失败都有可理解的恢复入口。
+- 关闭应用不会损坏正在写入的数据库。
+- Windows 首先完成安装包和升级烟雾测试；macOS、Linux 完成开发构建验证。
+- UI 不直接访问数据库或模型，所有业务通过 Core API。
+
+## 7. Phase 4：MCP 与 Agent 接入
+
+### 7.1 目标
+
+让 Codex、Cursor 等 Agent 安全、稳定地检索 LoreDock 中的知识。
+
+### 7.2 首批只读工具
+
+- `search_knowledge`
+- `read_source`
+- `list_libraries`
+- `list_sources`
+- `get_source_info`
+- `get_index_status`
+
+### 7.3 工作项
+
+1. 使用官方 Python MCP SDK 实现 MCP Server。
+2. 本地 stdio bridge 连接正在运行的 Core。
+3. 工具参数、结果、错误和分页契约测试。
+4. 按知识库授权和默认只读策略。
+5. 工具结果限制、引用定位和后续读取句柄。
+6. Agent 连接向导：
+   - Codex 自动/半自动配置。
+   - Cursor 配置。
+   - 通用 MCP JSON/命令复制。
+7. 连接状态、诊断日志和测试查询。
+
+### 7.4 验收条件
+
+- Codex 和 Cursor 均能搜索并继续读取命中来源。
+- Agent 无法访问未授权知识库。
+- MCP 不返回无限制全文或泄露本地绝对路径。
+- Core 重启后连接可以恢复或给出可操作错误。
+- MCP 契约变更有兼容策略。
+
+## 8. Phase 5：完整资料处理能力
+
+### 8.1 目标
+
+扩展实际个人知识库常见来源，同时保持基础安装包轻量。
+
+### 8.2 工作项
+
+- PPTX、XLSX、HTML 和纯文本笔记。
+- URL 抓取、网页正文抽取和快照。
+- 文件夹递归导入和增量监听。
+- 重复来源、移动、重命名和内容变化检测。
+- 表格、代码、问答和长文档专用分块。
+- OCR 作为独立可选组件下载。
+- 批量重试、暂停和取消任务。
+- 资料导出和可读 Markdown/JSON 导出。
+
+### 8.3 验收条件
+
+- 文件夹变化只重建受影响来源。
+- URL 导入具备 SSRF、重定向和体积限制。
+- OCR 未安装时不会影响其他格式。
+- 用户可以明确看到原始资料、解析产物和索引状态。
+
+## 9. Phase 6：服务器与 Web 版本
+
+### 9.1 目标
+
+在不改变核心领域逻辑的情况下，通过 Docker 提供远程 Web 管理和 MCP。
+
+### 9.2 工作项
+
+- Dockerfile 和 Docker Compose。
+- Web UI 复用桌面 React 页面。
+- 用户认证、会话、CSRF 和安全 Cookie。
+- HTTPS 反向代理部署说明。
+- 远程 MCP Streamable HTTP 和 OAuth 2.1。
+- 按用户/知识库授权。
+- 并发任务限制、存储配额和审计记录。
+- SQLite 适用范围监控；保留 Qdrant 向量适配器。
+
+### 9.3 验收条件
+
+- 全新服务器可按文档完成 Docker 部署。
+- 未认证访问无法读取资料、搜索结果或 MCP 工具。
+- 远程 MCP 通过授权流程连接。
+- 备份和恢复在容器升级前后通过验证。
+- 不支持移动端客户端，但浏览器可在常见桌面分辨率正常使用。
+
+## 10. Phase 7：稳定性、安全与发布
+
+### 10.1 工作项
+
+1. SQLite 在线备份、恢复和完整性验证。
+2. 应用、Core、数据库和索引版本迁移。
+3. 模型下载断点续传、校验和磁盘空间检查。
+4. 路径穿越、Zip Bomb、SSRF、XSS 和 MCP 权限测试。
+5. 长时间运行、异常断电、磁盘写满和损坏恢复测试。
+6. Windows、macOS、Linux 安装包、卸载和自动升级。
+7. 日志导出、隐私脱敏和问题诊断包。
+8. 用户文档、部署文档、故障排查和 Agent 接入指南。
+9. 第三方依赖、模型和素材的许可证清单。
+10. PolyForm Noncommercial 许可说明和商业授权入口预留。
+
+### 10.2 发布门槛
+
+- 所有关键路径端到端测试通过。
+- 检索质量没有低于 Phase 1 基线。
+- 安装、升级、备份、恢复和卸载均通过目标平台验证。
+- 不包含密钥、测试资料、私人日志或不兼容许可证内容。
+- 已知高危安全问题为零。
+- 发布说明列出迁移、兼容性和已知限制。
+
+## 11. 阶段依赖与并行关系
+
+```text
+Phase 0 工程基础
+   └── Phase 1 检索验证
+          └── Phase 2 Core MVP
+                 ├── Phase 3 桌面端 MVP
+                 ├── Phase 4 MCP 接入
+                 └── Phase 5 资料能力扩展
+                        └── Phase 6 服务器/Web
+                               └── Phase 7 发布
+```
+
+可并行项：
+
+- Phase 1 期间可以并行建立设计 Token 和基础 UI 组件，但不能提前固化未验证的数据结构。
+- Phase 2 API 稳定后，桌面端和 MCP 可由不同开发者并行。
+- Phase 5 的解析器可以按格式独立开发。
+- Phase 7 的安全测试、文档和打包可以在 Phase 3 后持续进行，而不是最后才开始。
+
+## 12. 每阶段统一完成定义
+
+一个阶段只有同时满足以下条件才算完成：
+
+1. 功能实现并满足阶段验收条件。
+2. 格式、静态检查、单元测试和相关集成测试通过。
+3. 用户可见行为有文档。
+4. 数据、API、MCP 或索引契约变更已版本化。
+5. 检索相关变更已运行评测集。
+6. 安全和隐私影响已检查。
+7. 没有将密钥、本地数据库、模型缓存或私人资料提交到仓库。
+8. 已记录未验证平台和已知限制。
+
+## 13. 第一轮执行顺序
+
+项目当前应从 Phase 0 开始，推荐按以下小步提交：
+
+1. `chore(repo): scaffold monorepo and toolchains`
+2. `chore(ci): add lint typecheck and test workflows`
+3. `docs(adr): record core and storage decisions`
+4. `feat(core): add health and version endpoints`
+5. `feat(storage): add app database and migrations`
+6. `test(evals): add retrieval evaluation fixture format`
+7. `feat(ingestion): add markdown and text parsing prototype`
+8. `feat(search): add fts baseline`
+9. `feat(models): add local embedding prototype`
+10. `feat(search): add vector and rrf evaluation pipeline`
+
+每一步都应保持仓库可构建、可测试，并避免一次提交同时引入脚手架、领域模型、数据库和 UI 大量代码。

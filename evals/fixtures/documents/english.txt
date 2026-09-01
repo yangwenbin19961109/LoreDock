@@ -1,0 +1,3 @@
+LoreDock is a lightweight, local-first knowledge hub. Original documents remain the source of truth, while parsed artifacts and search indexes are rebuildable.
+
+The desktop application targets Windows, macOS, and Linux. Mobile applications are outside the project scope.

@@ -98,6 +98,13 @@ class SearchRequest(ApiModel):
     lexical_only: bool = False
 
 
+class CitationRangeResponse(ApiModel):
+    char_start: int
+    char_end: int
+    page_start: int | None
+    page_end: int | None
+
+
 class SearchResultResponse(ApiModel):
     chunk_id: str
     source_id: str
@@ -107,6 +114,12 @@ class SearchResultResponse(ApiModel):
     char_end: int
     page: int | None
     title_path: tuple[str, ...]
+    matched_chunk_id: str
+    parent_id: str | None
+    context_id: str
+    context_text: str
+    matched_range: CitationRangeResponse
+    context_range: CitationRangeResponse
 
 
 class SearchResponse(ApiModel):

@@ -1,3 +1,5 @@
+import json
+import sqlite3
 from io import BytesIO
 from pathlib import Path
 
@@ -42,4 +44,34 @@ def test_library_source_search_read_delete_round_trip(tmp_path: Path) -> None:
     service.delete_source(source.id)
     assert service.search(library.id, "HTTPS") == []
     service.delete_library(library.id)
+    service.close()
+
+
+def test_old_index_contract_is_rebuilt_without_changing_source(tmp_path: Path) -> None:
+    service = LoreDockService(tmp_path)
+    library = service.create_library("Migration")
+    source, _, _ = service.import_source(
+        library.id,
+        "guide.md",
+        "text/markdown",
+        BytesIO(b"# Migration\n\nrebuildable derived index"),
+    )
+    paths = service.layout.library(library.id)
+    manifest = json.loads(paths.manifest.read_text(encoding="utf-8"))
+    manifest["schema_version"] = 2
+    paths.manifest.write_text(json.dumps(manifest), encoding="utf-8")
+
+    results = service.search(library.id, "derived index", lexical_only=True)
+
+    assert results[0].source_id == source.id
+    assert service.get_source(source.id).content_hash == source.content_hash
+    connection = sqlite3.connect(paths.index)
+    try:
+        version = connection.execute(
+            "SELECT value FROM index_metadata WHERE key='schema_version'"
+        ).fetchone()
+    finally:
+        connection.close()
+    assert version == ("3",)
+    assert json.loads(paths.manifest.read_text(encoding="utf-8"))["schema_version"] == 3
     service.close()

@@ -7,21 +7,26 @@ requires-python = ">=3.12,<3.14"
 license = { text = "PolyForm-Noncommercial-1.0.0" }
 dependencies = [
   "fastapi>=0.116,<1",
+  "numpy>=2,<3",
+  "onnxruntime>=1.23,<2",
   "pydantic-settings>=2.10,<3",
   "pypdf>=6,<7",
   "python-docx>=1.2,<2",
   "python-multipart>=0.0.20,<1",
   "sqlite-vec>=0.1.6,<0.2",
+  "tokenizers>=0.22,<1",
   "uvicorn[standard]>=0.35,<1",
 ]
 
 [project.scripts]
 loredock-eval = "loredock.evaluation.cli:main"
 loredock-bench = "loredock.evaluation.benchmark:main"
+loredock-model = "loredock.retrieval.model_cli:main"
 
 [dependency-groups]
 dev = [
   "httpx>=0.28,<1",
+  "pyinstaller>=6.16,<7",
   "pyright>=1.1.400,<2",
   "pytest>=8.4,<9",
   "pytest-cov>=6.2,<7",

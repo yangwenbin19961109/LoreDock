@@ -172,6 +172,39 @@ chunk_id, source_id, content_hash, text, title_path,
 page, char_start, char_end, previous_id, next_id, metadata
 ```
 
+### 7.1 父子上下文模型
+
+混合索引与父子索引解决不同问题，不能互相替代：混合索引负责提高召回质量，父子结构负责在命中后补足上下文。LoreDock 采用“子块参与排名、父块按需返回”的组合方式，不默认对整份文件生成父向量。
+
+```text
+Source
+└── Parent Section
+    ├── Child Chunk 1
+    ├── Child Chunk 2
+    └── Child Chunk 3
+```
+
+- Parent 是可重建的章节、页面组、表格、代码作用域、问答单元或消息会话，不是新的事实来源。
+- Child 是 FTS5 与向量召回的主要检索单元，保留较小粒度和精确引用。
+- Parent 保存完整上下文范围；Child 保存 `parent_id`、顺序和相邻关系。
+- 短笔记和天然完整的问答可以只有一个 Child，不强制制造父层级。
+- 整份文件通常过大且主题过多，不作为默认 Parent 返回，也不建立默认父向量。
+
+建议的可重建索引结构：
+
+```text
+parents:
+  parent_id, source_id, kind, title_path,
+  char_start, char_end, page_start, page_end, metadata
+
+chunks:
+  chunk_id, parent_id, source_id, ordinal,
+  previous_id, next_id, content_hash, text,
+  char_start, char_end, page, title_path, metadata
+```
+
+引入该结构时必须提升 index build contract 版本并重建索引，不能让缺少父子字段的旧索引与新查询逻辑混用。
+
 ## 8. 检索管线
 
 ```text
@@ -181,11 +214,13 @@ page, char_start, char_end, previous_id, next_id, metadata
              ↓
        Reciprocal Rank Fusion
              ↓
-    来源过滤、去重、相邻块合并
+    来源过滤、Child 去重与分组
              ↓
-       可选 Reranker 20 → 5～8
+  按需扩展 Parent 或相邻 Child
              ↓
-      返回文本、分数与精确引用
+   可选 Reranker / 上下文裁剪
+             ↓
+ 返回命中 Child、上下文与精确引用
 ```
 
 设计原则：
@@ -196,6 +231,47 @@ page, char_start, char_end, previous_id, next_id, metadata
 - 查询先按知识库、路径、类型、时间、标签等元数据过滤。
 - 对同一来源连续命中的分块执行相邻上下文扩展。
 - 不把相似度分数直接解释为概率。
+
+### 8.1 上下文扩展规则
+
+扩展必须发生在 Child 排名之后，不能用更大的 Parent 文本替换原始匹配分数：
+
+1. FTS5 与向量分别召回 Child，并通过 RRF 融合。
+2. 对相同 `chunk_id` 去重，并按 `source_id + parent_id` 分组。
+3. 命中内容已经完整时，只返回 Child。
+4. 命中位于句子、列表、表格或代码边界时，扩展前后相邻 Child。
+5. 同一 Parent 有多个连续 Child 进入高位结果时，合并为 Parent 或连续范围。
+6. Parent 超过上下文预算时，只保留命中 Child、必要邻块和标题路径。
+7. Reranker 只处理数量受限的融合候选；失败时继续返回融合与扩展结果。
+
+首次搜索结果必须区分“参与排名的内容”和“最终返回的上下文”：
+
+```json
+{
+  "matched_chunk_id": "child-id",
+  "context_id": "parent-or-range-id",
+  "source_id": "source-id",
+  "matched_range": { "char_start": 1200, "char_end": 1680 },
+  "context_range": { "char_start": 800, "char_end": 2400 },
+  "title_path": ["检索", "故障降级"]
+}
+```
+
+MCP 首次搜索默认返回紧凑 Child 与有限邻块，并提供继续读取 Parent 或来源范围的句柄，避免一次返回整篇长文档。桌面 UI 可以先展示命中 Child，高亮 `matched_range`，用户展开时再读取 `context_range`。
+
+### 8.2 按资料类型选择层级策略
+
+| 资料类型 | 检索与上下文策略 |
+|---|---|
+| 短笔记 | 混合检索 Child，不强制创建 Parent |
+| FAQ | 一个问答作为 Parent/Child 单元，通常不扩展 |
+| Markdown 技术文档 | 标题章节为 Parent，段落组为 Child |
+| PDF、DOCX | 章节或页面组为 Parent，段落为 Child |
+| 表格 | 整表或逻辑区域为 Parent，行组为 Child |
+| 代码 | 文件、类或函数为 Parent，语义代码块为 Child |
+| 聊天记录 | 会话或话题窗口为 Parent，消息窗口为 Child |
+
+父子策略必须通过固定评测集比较，而不是默认扩大上下文。除 Recall@K、MRR 和引用正确率外，还要记录 context precision、平均返回 tokens、重复率、扩展延迟和 Agent 任务成功率。
 
 ## 9. SQLite 规模策略
 
@@ -317,6 +393,7 @@ src/loredock/
 | Phase 0 | 建立 Monorepo、Python Core、React Web、Tauri 桌面壳、共享契约、ADR 与 CI |
 | Phase 1 | 用固定基准集验证解析、分块、Embedding、混合检索及目标规模延迟 |
 | Phase 2 | 实现知识库、来源、任务、SQLite 索引和可定位引用的 Core MVP |
+| Phase 2.5 | 以 Child 混合召回、Parent/相邻块按需扩展完善分层上下文检索，并通过评测确定预算 |
 | Phase 3 | 完成面向普通用户的 Web/桌面知识库管理体验 |
 | Phase 4 | 提供本地 MCP、接入向导、权限、审计和诊断能力 |
 | Phase 5 | 完成 Windows、macOS、Linux 的安装、更新、迁移和发布 |
@@ -343,4 +420,5 @@ src/loredock/
 | 默认数据库 | SQLite | 单库规模或并发超过目标范围 |
 | 默认向量引擎 | sqlite-vec | API 稳定性、性能或跨平台构建不达标 |
 | 默认搜索 | BM25 + Vector + RRF | 自有评测证明其他融合方式显著更优 |
+| 上下文策略 | Child 混合召回 + 按需 Parent/邻块扩展 | 固定评测证明平铺 Chunk 或其他层级方案质量更优 |
 | 默认模型候选 | multilingual-e5-small INT8 | 需在 200～500 条人工集完成同设备对比后转为正式默认值；BGE-M3 仅作为质量上限候选 |

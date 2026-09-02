@@ -27,7 +27,7 @@ data/
     └── manifest.json
 ```
 
-`app.sqlite` 使用 schema version 2。索引使用独立 build contract version 2，记录 Embedding 标识、维度和规范化规则。不同维度或模型不能混用。
+`app.sqlite` 使用 schema version 2。Phase 2 交付时索引使用 build contract version 2；Phase 2.5 已将派生索引升级至 version 3。不同维度或模型不能混用，旧索引通过旁路重建后原子切换。
 
 ## 当前实现边界
 

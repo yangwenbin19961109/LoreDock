@@ -10,3 +10,7 @@ Create a new record by copying `0000-template.md`, assigning the next four-digit
 ```
 
 Accepted ADRs are immutable historical records. If a decision changes, add a new ADR that supersedes the earlier one.
+
+Current accepted decisions include the Python Core sidecar boundary, its authenticated lifecycle,
+per-library SQLite indexes, hybrid retrieval, authoritative original sources, and hybrid Child retrieval with on-demand Parent
+context.

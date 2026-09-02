@@ -29,7 +29,7 @@ export interface ErrorResponse {
 
 export interface PageInfo {
   readonly limit: number
-  readonly next_cursor?: string
+  readonly next_cursor?: string | null
 }
 
 export interface Page<T> {
@@ -75,6 +75,16 @@ export interface Job {
   readonly updated_at: string
 }
 
+export interface SourceImportResponse {
+  readonly source: Source
+  readonly job: Job
+  readonly duplicate: boolean
+}
+
+export interface LibraryCreateRequest {
+  readonly name: string
+}
+
 export interface SearchResult {
   readonly chunk_id: ChunkId
   readonly source_id: SourceId
@@ -84,12 +94,36 @@ export interface SearchResult {
   readonly char_end: number
   readonly page: number | null
   readonly title_path: readonly string[]
+  readonly matched_chunk_id: ChunkId
+  readonly parent_id: string | null
+  readonly context_id: string
+  readonly context_text: string
+  readonly matched_range: CitationRange
+  readonly context_range: CitationRange
+}
+
+export interface CitationRange {
+  readonly char_start: number
+  readonly char_end: number
+  readonly page_start: number | null
+  readonly page_end: number | null
 }
 
 export interface SearchRequest {
   readonly query: string
   readonly limit?: number
   readonly lexical_only?: boolean
+}
+
+export interface SearchResponse {
+  readonly items: readonly SearchResult[]
+}
+
+export interface SourceContentResponse {
+  readonly source_id: SourceId
+  readonly text: string
+  readonly char_start: number
+  readonly char_end: number
 }
 
 export const coreEndpoint = (path: string): string =>

@@ -82,5 +82,621 @@
     "expected_sources": ["english", "citations"],
     "expected_passages": ["search indexes are rebuildable"],
     "tags": ["en", "index"]
+  },
+  {
+    "id": "hierarchy-001",
+    "query": "哪些内容参与 BM25 和向量排名？",
+    "expected_sources": ["hierarchical-guide"],
+    "expected_passages": ["Child Chunk 参与 BM25 和向量排名"],
+    "tags": ["zh", "hierarchy", "child"]
+  },
+  {
+    "id": "hierarchy-002",
+    "query": "Parent Section 可以表示哪些结构？",
+    "expected_sources": ["hierarchical-guide"],
+    "expected_passages": ["标题章节、页面组、表格区域、代码作用域或问答单元"],
+    "tags": ["zh", "hierarchy", "parent"]
+  },
+  {
+    "id": "hierarchy-003",
+    "query": "章节超过上下文预算时怎么办？",
+    "expected_sources": ["hierarchical-guide"],
+    "expected_passages": ["只返回包含命中内容的连续范围"],
+    "tags": ["zh", "context-budget"]
+  },
+  {
+    "id": "hierarchy-004",
+    "query": "4000 个字符是最终正式参数吗？",
+    "expected_sources": ["hierarchical-guide"],
+    "expected_passages": ["不是正式产品参数"],
+    "tags": ["zh", "context-budget"]
+  },
+  {
+    "id": "hierarchy-005",
+    "query": "如何避免同一章节重复占用上下文？",
+    "expected_sources": ["hierarchical-guide"],
+    "expected_passages": ["按 context ID 分组去重"],
+    "tags": ["zh", "deduplication"]
+  },
+  {
+    "id": "hierarchy-006",
+    "query": "Reranker 发生异常时搜索应该返回什么？",
+    "expected_sources": ["hierarchical-guide", "code-sample"],
+    "expected_passages": ["保留 RRF 融合结果"],
+    "tags": ["zh", "reranker", "fallback"]
+  },
+  {
+    "id": "faq-001",
+    "query": "普通用户需要自己安装 PostgreSQL 或 Redis 吗？",
+    "expected_sources": ["faq"],
+    "expected_passages": ["无需安装 PostgreSQL、Redis 或独立向量数据库"],
+    "tags": ["zh", "faq", "database"]
+  },
+  {
+    "id": "faq-002",
+    "query": "下载本地模型后能否完全离线检索？",
+    "expected_sources": ["faq"],
+    "expected_passages": ["都可以离线工作"],
+    "tags": ["zh", "faq", "offline"]
+  },
+  {
+    "id": "faq-003",
+    "query": "为什么不能直接复制正在写入的 SQLite 文件？",
+    "expected_sources": ["faq"],
+    "expected_passages": ["SQLite backup API 或 WAL 一致性快照"],
+    "tags": ["zh", "faq", "backup"]
+  },
+  {
+    "id": "faq-004",
+    "query": "模型校验失败后还有什么搜索方式？",
+    "expected_sources": ["faq"],
+    "expected_passages": ["保留 BM25-only 搜索"],
+    "tags": ["zh", "faq", "fallback"]
+  },
+  {
+    "id": "faq-005",
+    "query": "LoreDock 会开发 iOS 或 Android 应用吗？",
+    "expected_sources": ["faq", "english"],
+    "expected_passages": ["不支持"],
+    "tags": ["zh", "faq", "scope"]
+  },
+  {
+    "id": "faq-006",
+    "query": "MCP 初始权限允许删除知识库吗？",
+    "expected_sources": ["faq", "security-boundaries"],
+    "expected_passages": ["MCP 工具默认只读"],
+    "tags": ["zh", "faq", "mcp", "authorization"]
+  },
+  {
+    "id": "table-001",
+    "query": "multilingual-e5-small 的向量维度是多少？",
+    "expected_sources": ["tables"],
+    "expected_passages": ["384"],
+    "tags": ["zh", "table", "embedding"]
+  },
+  {
+    "id": "table-002",
+    "query": "哪个模型作为 1024 维的质量上限候选？",
+    "expected_sources": ["tables"],
+    "expected_passages": ["BGE-M3"],
+    "tags": ["zh", "table", "embedding"]
+  },
+  {
+    "id": "table-003",
+    "query": "E5 查询和资料分别添加什么前缀？",
+    "expected_sources": ["tables"],
+    "expected_passages": ["`query: `，资料前缀是 `passage: `"],
+    "tags": ["zh", "table", "embedding-contract"]
+  },
+  {
+    "id": "table-004",
+    "query": "十万分块的哈希基线 P95 是多少？",
+    "expected_sources": ["tables"],
+    "expected_passages": ["225.94 ms"],
+    "tags": ["zh", "table", "performance"]
+  },
+  {
+    "id": "table-005",
+    "query": "Docker 服务器部署需要什么连接和认证？",
+    "expected_sources": ["tables", "security-boundaries"],
+    "expected_passages": ["HTTPS"],
+    "tags": ["zh", "table", "deployment"]
+  },
+  {
+    "id": "table-006",
+    "query": "本地桌面 Core 默认监听哪个地址？",
+    "expected_sources": ["tables", "security-boundaries", "local-first"],
+    "expected_passages": ["127.0.0.1"],
+    "tags": ["zh", "table", "security"]
+  },
+  {
+    "id": "code-001",
+    "query": "路径导入如何阻止访问知识库目录之外？",
+    "expected_sources": ["code-sample"],
+    "expected_passages": ["is_relative_to(root)"],
+    "tags": ["zh", "code", "path-safety"]
+  },
+  {
+    "id": "code-002",
+    "query": "符号链接和点点路径应在什么时候检查？",
+    "expected_sources": ["code-sample"],
+    "expected_passages": ["解析后的绝对路径上判断"],
+    "tags": ["zh", "code", "path-safety"]
+  },
+  {
+    "id": "code-003",
+    "query": "RRF 中每个排名位置的贡献公式是什么？",
+    "expected_sources": ["code-sample"],
+    "expected_passages": ["1 / (k + rank)"],
+    "tags": ["zh", "code", "rrf"]
+  },
+  {
+    "id": "code-004",
+    "query": "为什么 RRF 不需要统一 BM25 和向量分数尺度？",
+    "expected_sources": ["code-sample"],
+    "expected_passages": ["不要求比较 BM25 与向量分数的数值尺度"],
+    "tags": ["zh", "code", "rrf"]
+  },
+  {
+    "id": "code-005",
+    "query": "Reranker 抛出异常能否返回空列表？",
+    "expected_sources": ["code-sample"],
+    "expected_passages": ["不能返回空列表"],
+    "tags": ["zh", "code", "fallback"]
+  },
+  {
+    "id": "code-006",
+    "query": "新索引何时替换正在使用的旧索引？",
+    "expected_sources": ["code-sample", "operations"],
+    "expected_passages": ["完整构建并校验成功后"],
+    "tags": ["zh", "code", "atomicity"]
+  },
+  {
+    "id": "ops-001",
+    "query": "导入任务会经过哪些处理状态？",
+    "expected_sources": ["operations"],
+    "expected_passages": ["pending、parsing、chunking、embedding 和 ready"],
+    "tags": ["zh", "operations", "jobs"]
+  },
+  {
+    "id": "ops-002",
+    "query": "Worker 获得租约后需要定期做什么？",
+    "expected_sources": ["operations"],
+    "expected_passages": ["发送 heartbeat"],
+    "tags": ["zh", "operations", "jobs"]
+  },
+  {
+    "id": "ops-003",
+    "query": "失败的资料索引最多自动重试多少次？",
+    "expected_sources": ["operations"],
+    "expected_passages": ["最多重试三次"],
+    "tags": ["zh", "operations", "retry"]
+  },
+  {
+    "id": "ops-004",
+    "query": "缺少原始资料时能否重试生成空索引？",
+    "expected_sources": ["operations"],
+    "expected_passages": ["不是创建空索引"],
+    "tags": ["zh", "operations", "retry"]
+  },
+  {
+    "id": "ops-005",
+    "query": "删除来源时需要清理哪些索引记录？",
+    "expected_sources": ["operations"],
+    "expected_passages": ["FTS 行、向量、Parent、Child 和缓存"],
+    "tags": ["zh", "operations", "deletion"]
+  },
+  {
+    "id": "ops-006",
+    "query": "模型下载中断后如何避免加载半成品？",
+    "expected_sources": ["operations"],
+    "expected_passages": ["`.part` 临时文件"],
+    "tags": ["zh", "operations", "model-assets"]
+  },
+  {
+    "id": "security-001",
+    "query": "为什么本地模式拒绝绑定 0.0.0.0？",
+    "expected_sources": ["security-boundaries"],
+    "expected_passages": ["避免无意间暴露知识库"],
+    "tags": ["zh", "security", "network"]
+  },
+  {
+    "id": "security-002",
+    "query": "固定开发端口能否作为桌面应用的安全边界？",
+    "expected_sources": ["security-boundaries"],
+    "expected_passages": ["不能把固定开发端口当成安全边界"],
+    "tags": ["zh", "security", "desktop"]
+  },
+  {
+    "id": "security-003",
+    "query": "通过搜索拿到 source ID 后还需要再次鉴权吗？",
+    "expected_sources": ["security-boundaries"],
+    "expected_passages": ["不能因为第一次搜索获得了 source ID，就跳过后续读取的授权检查"],
+    "tags": ["zh", "security", "mcp"]
+  },
+  {
+    "id": "security-004",
+    "query": "URL 抓取要阻止哪些网络目标以防 SSRF？",
+    "expected_sources": ["security-boundaries"],
+    "expected_passages": ["回环地址、链路本地地址、云元数据地址和其他内网目标"],
+    "tags": ["zh", "security", "ssrf"]
+  },
+  {
+    "id": "security-005",
+    "query": "压缩包导入如何防御 Zip Bomb？",
+    "expected_sources": ["security-boundaries"],
+    "expected_passages": ["限制展开后的总体积、文件数量和嵌套深度"],
+    "tags": ["zh", "security", "archive"]
+  },
+  {
+    "id": "security-006",
+    "query": "资料里的命令或指令可以直接执行吗？",
+    "expected_sources": ["security-boundaries"],
+    "expected_passages": ["不得把资料中的指令当成系统命令执行"],
+    "tags": ["zh", "security", "untrusted-content"]
+  },
+  {
+    "id": "en-cross-001",
+    "query": "Why should a packaged desktop app use a dynamic port instead of trusting its development port?",
+    "expected_sources": ["security-boundaries"],
+    "expected_passages": ["动态端口和每进程认证秘密"],
+    "tags": ["en", "cross-lingual", "security"]
+  },
+  {
+    "id": "en-cross-002",
+    "query": "Which prefixes are required for E5 queries and passages?",
+    "expected_sources": ["tables"],
+    "expected_passages": ["`query: `，资料前缀是 `passage: `"],
+    "tags": ["en", "cross-lingual", "embedding-contract"]
+  },
+  {
+    "id": "model-001",
+    "query": "什么模型状态才允许创建 ONNX 推理会话？",
+    "expected_sources": ["model-handbook"],
+    "expected_passages": ["只有 ready 状态允许创建 ONNX 推理会话"],
+    "tags": ["zh", "docx", "model-assets"]
+  },
+  {
+    "id": "model-002",
+    "query": "模型下载时使用什么临时扩展名？",
+    "expected_sources": ["model-handbook"],
+    "expected_passages": ["扩展名为 .part 的临时文件"],
+    "tags": ["zh", "docx", "download"]
+  },
+  {
+    "id": "model-003",
+    "query": "模型文件需要校验哪两项？",
+    "expected_sources": ["model-handbook"],
+    "expected_passages": ["预期字节数和 SHA-256"],
+    "tags": ["zh", "docx", "checksum"]
+  },
+  {
+    "id": "model-004",
+    "query": "模型清单能否默默追踪 main 分支？",
+    "expected_sources": ["model-handbook"],
+    "expected_passages": ["固定 repository revision"],
+    "tags": ["zh", "docx", "reproducibility"]
+  },
+  {
+    "id": "model-005",
+    "query": "E5 对查询和资料使用什么前缀？",
+    "expected_sources": ["model-handbook", "tables"],
+    "expected_passages": ["query: 前缀，资料文本必须添加 passage: 前缀"],
+    "tags": ["zh", "docx", "embedding-contract"]
+  },
+  {
+    "id": "model-006",
+    "query": "E5 的 384 维向量如何池化和归一化？",
+    "expected_sources": ["model-handbook"],
+    "expected_passages": ["attention mask 执行 mean pooling，随后对每个 384 维向量做 L2 归一化"],
+    "tags": ["zh", "docx", "embedding"]
+  },
+  {
+    "id": "model-007",
+    "query": "E5 输入长度的硬上限是多少？",
+    "expected_sources": ["model-handbook", "long-knowledge-manual"],
+    "expected_passages": ["E5 输入最多 512 tokens"],
+    "tags": ["zh", "docx", "embedding"]
+  },
+  {
+    "id": "model-008",
+    "query": "本地嵌入默认批量大小是多少？",
+    "expected_sources": ["model-handbook", "long-knowledge-manual"],
+    "expected_passages": ["默认推理批大小是 16"],
+    "tags": ["zh", "docx", "performance"]
+  },
+  {
+    "id": "model-009",
+    "query": "普通 CPU 用户需要安装 CUDA 或 PyTorch 吗？",
+    "expected_sources": ["model-handbook"],
+    "expected_passages": ["不要求用户安装 CUDA、PyTorch"],
+    "tags": ["zh", "docx", "packaging"]
+  },
+  {
+    "id": "model-010",
+    "query": "模型契约的哪些变化要求重建索引？",
+    "expected_sources": ["model-handbook"],
+    "expected_passages": ["模型标识、校验和、维度、前缀、池化或归一化规则变化"],
+    "tags": ["zh", "docx", "reindex"]
+  },
+  {
+    "id": "model-011",
+    "query": "嵌入模型失败后保留什么能力？",
+    "expected_sources": ["model-handbook", "faq", "hybrid-search"],
+    "expected_passages": ["降级到 BM25-only"],
+    "tags": ["zh", "docx", "fallback"]
+  },
+  {
+    "id": "model-012",
+    "query": "本地模型模式会把正文发给外部提供商吗？",
+    "expected_sources": ["model-handbook"],
+    "expected_passages": ["不发送文档正文和查询到外部提供商"],
+    "tags": ["zh", "docx", "privacy"]
+  },
+  {
+    "id": "recovery-001",
+    "query": "诊断包为什么不能包含原始文档和完整查询？",
+    "expected_sources": ["recovery-guide"],
+    "expected_passages": ["不包含原始文档、认证令牌"],
+    "tags": ["zh", "pdf", "privacy"]
+  },
+  {
+    "id": "recovery-002",
+    "query": "Core 无法启动时先检查什么？",
+    "expected_sources": ["recovery-guide"],
+    "expected_passages": ["数据目录权限、端口占用和 app.sqlite"],
+    "tags": ["zh", "pdf", "startup"]
+  },
+  {
+    "id": "recovery-003",
+    "query": "模型加载失败要按什么顺序排查？",
+    "expected_sources": ["recovery-guide"],
+    "expected_passages": ["manifest、文件大小、SHA-256、ONNX Runtime 版本"],
+    "tags": ["zh", "pdf", "model-assets"]
+  },
+  {
+    "id": "recovery-004",
+    "query": "索引契约不匹配时如何安全切换？",
+    "expected_sources": ["recovery-guide"],
+    "expected_passages": ["在旁路文件中重建派生索引，成功校验后再原子切换"],
+    "tags": ["zh", "pdf", "reindex"]
+  },
+  {
+    "id": "recovery-005",
+    "query": "任务 heartbeat 停止且租约过期怎么办？",
+    "expected_sources": ["recovery-guide"],
+    "expected_passages": ["把任务标记为失败或重新排队"],
+    "tags": ["zh", "pdf", "jobs"]
+  },
+  {
+    "id": "recovery-006",
+    "query": "数据库恢复前应运行哪条完整性检查？",
+    "expected_sources": ["recovery-guide"],
+    "expected_passages": ["PRAGMA integrity_check"],
+    "tags": ["zh", "pdf", "sqlite"]
+  },
+  {
+    "id": "recovery-007",
+    "query": "索引构建磁盘不足时应保留哪些内容？",
+    "expected_sources": ["recovery-guide"],
+    "expected_passages": ["保留旧索引和原始资料"],
+    "tags": ["zh", "pdf", "disk"]
+  },
+  {
+    "id": "recovery-008",
+    "query": "恢复 app.sqlite 应使用什么备份方式？",
+    "expected_sources": ["recovery-guide", "faq", "long-knowledge-manual"],
+    "expected_passages": ["SQLite backup API"],
+    "tags": ["zh", "pdf", "backup"]
+  },
+  {
+    "id": "recovery-009",
+    "query": "来源删除失败时要记录什么以便重试？",
+    "expected_sources": ["recovery-guide"],
+    "expected_passages": ["尚未清理的精确 source ID"],
+    "tags": ["zh", "pdf", "deletion"]
+  },
+  {
+    "id": "recovery-010",
+    "query": "扫描型 PDF 没有文本层时如何处理？",
+    "expected_sources": ["recovery-guide"],
+    "expected_passages": ["标记需要 OCR"],
+    "tags": ["zh", "pdf", "ocr"]
+  },
+  {
+    "id": "recovery-011",
+    "query": "远程 MCP 连接异常应检查哪些安全项？",
+    "expected_sources": ["recovery-guide", "agents"],
+    "expected_passages": ["HTTPS 证书、授权范围"],
+    "tags": ["zh", "pdf", "mcp"]
+  },
+  {
+    "id": "recovery-012",
+    "query": "诊断日志默认可以记录文档正文或 Cookie 吗？",
+    "expected_sources": ["recovery-guide"],
+    "expected_passages": ["文档正文、密钥、Cookie"],
+    "tags": ["zh", "pdf", "logging"]
+  },
+  {
+    "id": "recovery-013",
+    "query": "恢复任务标记 succeeded 前要通过哪四项？",
+    "expected_sources": ["recovery-guide"],
+    "expected_passages": ["数据库完整、来源可读、索引契约匹配、搜索引用有效"],
+    "tags": ["zh", "pdf", "recovery"]
+  },
+  {
+    "id": "manual-001",
+    "query": "知识库显示名称允许多少个 Unicode 字符？",
+    "expected_sources": ["long-knowledge-manual"],
+    "expected_passages": ["最多 120 个 Unicode 字符"],
+    "tags": ["zh", "long-document", "validation"]
+  },
+  {
+    "id": "manual-002",
+    "query": "桌面端单个资料默认最多多大？",
+    "expected_sources": ["long-knowledge-manual"],
+    "expected_passages": ["默认导入上限是 100 MiB"],
+    "tags": ["zh", "long-document", "ingestion"]
+  },
+  {
+    "id": "manual-003",
+    "query": "按来源 ID 读取原文默认返回多少字符？",
+    "expected_sources": ["long-knowledge-manual"],
+    "expected_passages": ["单次默认返回 8000 个字符"],
+    "tags": ["zh", "long-document", "read"]
+  },
+  {
+    "id": "manual-004",
+    "query": "可恢复任务自动重试几次后进入 failed？",
+    "expected_sources": ["long-knowledge-manual", "operations"],
+    "expected_passages": ["最多自动重试 3 次"],
+    "tags": ["zh", "long-document", "jobs"]
+  },
+  {
+    "id": "manual-005",
+    "query": "评测基线的 RRF 常数 K 是多少？",
+    "expected_sources": ["long-knowledge-manual", "hybrid-search"],
+    "expected_passages": ["RRF 常数 K 设为 60"],
+    "tags": ["zh", "long-document", "rrf"]
+  },
+  {
+    "id": "manual-006",
+    "query": "词法和向量检索默认各取多少 Child 候选？",
+    "expected_sources": ["long-knowledge-manual"],
+    "expected_passages": ["默认各取前 50 个 Child 候选"],
+    "tags": ["zh", "long-document", "retrieval"]
+  },
+  {
+    "id": "manual-007",
+    "query": "普通搜索默认返回几个上下文结果？",
+    "expected_sources": ["long-knowledge-manual"],
+    "expected_passages": ["默认返回 8 个上下文结果"],
+    "tags": ["zh", "long-document", "retrieval"]
+  },
+  {
+    "id": "manual-008",
+    "query": "Child 分块的目标、硬上限和重叠分别是多少？",
+    "expected_sources": ["long-knowledge-manual"],
+    "expected_passages": ["目标大小是 512 个字符，硬上限为 768 个字符，相邻 Child 重叠 64 个字符"],
+    "tags": ["zh", "long-document", "chunking"]
+  },
+  {
+    "id": "manual-009",
+    "query": "multilingual-e5-small 的维度、批量和输入上限是什么？",
+    "expected_sources": ["long-knowledge-manual", "model-handbook"],
+    "expected_passages": ["384 维向量，默认批量大小为 16，模型输入硬上限为 512 tokens"],
+    "tags": ["zh", "long-document", "embedding"]
+  },
+  {
+    "id": "manual-010",
+    "query": "固定端口 49321 可以用于打包桌面应用吗？",
+    "expected_sources": ["long-knowledge-manual"],
+    "expected_passages": ["仅开发模式使用固定端口 49321"],
+    "tags": ["zh", "long-document", "desktop"]
+  },
+  {
+    "id": "manual-011",
+    "query": "首个稳定 HTTP API 的路径前缀是什么？",
+    "expected_sources": ["long-knowledge-manual"],
+    "expected_passages": ["`/api/v1`"],
+    "tags": ["zh", "long-document", "api"]
+  },
+  {
+    "id": "manual-012",
+    "query": "用户元数据和每库搜索索引是否放在同一个文件？",
+    "expected_sources": ["long-knowledge-manual"],
+    "expected_passages": ["可重建搜索索引与它分开保存"],
+    "tags": ["zh", "long-document", "storage"]
+  },
+  {
+    "id": "manual-013",
+    "query": "父子混合索引的 build contract 版本是多少？",
+    "expected_sources": ["long-knowledge-manual"],
+    "expected_passages": ["build contract 版本是 3"],
+    "tags": ["zh", "long-document", "index-contract"]
+  },
+  {
+    "id": "manual-014",
+    "query": "评测夹具假定的元数据 schema version 是多少？",
+    "expected_sources": ["long-knowledge-manual"],
+    "expected_passages": ["schema version 为 2"],
+    "tags": ["zh", "long-document", "migration"]
+  },
+  {
+    "id": "manual-015",
+    "query": "内容去重为什么不能只比较文件名？",
+    "expected_sources": ["long-knowledge-manual"],
+    "expected_passages": ["原始字节的 SHA-256 内容哈希"],
+    "tags": ["zh", "long-document", "deduplication"]
+  },
+  {
+    "id": "manual-016",
+    "query": "单个来源的新 Parent 与 Child 何时可见？",
+    "expected_sources": ["long-knowledge-manual"],
+    "expected_passages": ["校验成功后在一个事务中切换可见版本"],
+    "tags": ["zh", "long-document", "atomicity"]
+  },
+  {
+    "id": "manual-017",
+    "query": "稳定引用至少包含哪些标识和位置？",
+    "expected_sources": ["long-knowledge-manual", "citations"],
+    "expected_passages": ["library ID、source ID、chunk ID、字符起止位置"],
+    "tags": ["zh", "long-document", "citation"]
+  },
+  {
+    "id": "manual-018",
+    "query": "表格上下文应该如何组织表头和相关行？",
+    "expected_sources": ["long-knowledge-manual"],
+    "expected_passages": ["标题、表头与相关行放进同一 Parent"],
+    "tags": ["zh", "long-document", "table"]
+  },
+  {
+    "id": "manual-019",
+    "query": "代码资料应该优先以什么作为 Parent？",
+    "expected_sources": ["long-knowledge-manual"],
+    "expected_passages": ["以类或函数作为 Parent"],
+    "tags": ["zh", "long-document", "code"]
+  },
+  {
+    "id": "manual-020",
+    "query": "Reranker 输出无效时返回什么排序？",
+    "expected_sources": ["long-knowledge-manual", "hierarchical-guide"],
+    "expected_passages": ["已经去重的 RRF 融合顺序"],
+    "tags": ["zh", "long-document", "fallback"]
+  },
+  {
+    "id": "manual-021",
+    "query": "Core 默认监听哪个地址？",
+    "expected_sources": ["long-knowledge-manual", "local-first"],
+    "expected_passages": ["127.0.0.1"],
+    "tags": ["zh", "long-document", "security"]
+  },
+  {
+    "id": "manual-022",
+    "query": "MCP 搜索需要更多正文时 Agent 应怎么办？",
+    "expected_sources": ["long-knowledge-manual"],
+    "expected_passages": ["使用 source ID 发起后续只读请求"],
+    "tags": ["zh", "long-document", "mcp"]
+  },
+  {
+    "id": "manual-023",
+    "query": "运行中的 app.sqlite 应如何一致性备份？",
+    "expected_sources": ["long-knowledge-manual", "faq"],
+    "expected_passages": ["SQLite backup API 或 WAL 一致性快照"],
+    "tags": ["zh", "long-document", "backup"]
+  },
+  {
+    "id": "manual-024",
+    "query": "URL 每次重定向后为什么要重新检查目标？",
+    "expected_sources": ["long-knowledge-manual", "security-boundaries"],
+    "expected_passages": ["拒绝回环、链路本地、云元数据和私有网络目标"],
+    "tags": ["zh", "long-document", "ssrf"]
+  },
+  {
+    "id": "manual-025",
+    "query": "完整删除来源需要清理哪些派生内容？",
+    "expected_sources": ["long-knowledge-manual", "operations"],
+    "expected_passages": ["原始副本、解析产物、FTS 行、向量、Parent、Child 和缓存"],
+    "tags": ["zh", "long-document", "deletion"]
   }
 ]

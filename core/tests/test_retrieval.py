@@ -3,7 +3,11 @@ from pathlib import Path
 from loredock.ingestion.parsers import ParsedDocument
 from loredock.retrieval import HashingEmbeddingProvider, HybridSearchIndex
 from loredock.retrieval.analyzer import lexical_terms
-from loredock.retrieval.chunking import ChunkingConfig, chunk_document
+from loredock.retrieval.chunking import (
+    ChunkingConfig,
+    chunk_document,
+    chunk_document_hierarchy,
+)
 from loredock.retrieval.fusion import reciprocal_rank_fusion
 
 
@@ -58,3 +62,54 @@ def test_source_replacement_is_atomic_and_removes_old_terms(tmp_path: Path) -> N
 
         assert index.search("obsolete", lexical_only=True) == []
         assert index.search("current", lexical_only=True)[0].text == "current keyword"
+
+
+def test_child_match_returns_bounded_parent_context(tmp_path: Path) -> None:
+    text = "# Retrieval\n\n" + "background " * 20 + "needle fact " + "continuation " * 20
+    hierarchy = chunk_document_hierarchy(
+        ParsedDocument("source", "retrieval", text),
+        ChunkingConfig(target_tokens=8, max_tokens=8, overlap_tokens=0),
+    )
+    with HybridSearchIndex(tmp_path / "index.sqlite", HashingEmbeddingProvider(32)) as index:
+        index.add(hierarchy.chunks, hierarchy.parents)
+        result = index.search("needle", lexical_only=True, max_context_chars=80)[0]
+
+    assert result.matched_chunk_id == result.chunk_id
+    assert result.parent_id is not None
+    assert "needle" in result.text
+    assert "needle" in result.context_text
+    assert len(result.context_text) <= 80
+    assert result.context_range.char_start <= result.matched_range.char_start
+    assert result.context_range.char_end >= result.matched_range.char_end
+
+
+def test_results_with_same_parent_are_grouped(tmp_path: Path) -> None:
+    text = "# One\n\nkeyword first.\n\nkeyword second.\n\n# Two\n\nkeyword third."
+    hierarchy = chunk_document_hierarchy(
+        ParsedDocument("source", "grouping", text),
+        ChunkingConfig(target_tokens=4, max_tokens=4, overlap_tokens=0),
+    )
+    with HybridSearchIndex(tmp_path / "index.sqlite", HashingEmbeddingProvider(32)) as index:
+        index.add(hierarchy.chunks, hierarchy.parents)
+        results = index.search("keyword", lexical_only=True, limit=8)
+
+    assert len({result.context_id for result in results}) == len(results)
+    assert len(results) == 2
+
+
+def test_context_strategies_keep_the_same_ranked_child(tmp_path: Path) -> None:
+    text = "# Section\n\n" + "alpha " * 12 + "needle answer " + "omega " * 12
+    hierarchy = chunk_document_hierarchy(
+        ParsedDocument("source", "strategies", text),
+        ChunkingConfig(target_tokens=6, max_tokens=6, overlap_tokens=0),
+    )
+    with HybridSearchIndex(tmp_path / "index.sqlite", HashingEmbeddingProvider(32)) as index:
+        index.add(hierarchy.chunks, hierarchy.parents)
+        child = index.search("needle", lexical_only=True, context_strategy="child")[0]
+        adjacent = index.search("needle", lexical_only=True, context_strategy="adjacent")[0]
+        parent = index.search("needle", lexical_only=True, context_strategy="parent")[0]
+
+    assert child.matched_chunk_id == adjacent.matched_chunk_id == parent.matched_chunk_id
+    assert child.context_text == child.text
+    assert len(child.context_text) <= len(adjacent.context_text) <= len(parent.context_text)
+    assert "needle" in adjacent.context_text

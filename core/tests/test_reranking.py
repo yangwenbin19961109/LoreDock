@@ -1,4 +1,4 @@
-from loredock.retrieval.index import SearchResult
+from loredock.retrieval.index import CitationRange, SearchResult
 from loredock.retrieval.reranking import rerank_or_fallback
 
 
@@ -10,6 +10,9 @@ class BrokenReranker:
 
 
 def test_reranker_failure_returns_fused_candidates() -> None:
-    candidate = SearchResult("c", "s", "text", 1.0, 0, 4, None, ())
+    location = CitationRange(0, 4, None, None)
+    candidate = SearchResult(
+        "c", "s", "text", 1.0, 0, 4, None, (), "c", None, "c", "text", location, location
+    )
 
     assert rerank_or_fallback(BrokenReranker(), "query", [candidate], limit=1) == [candidate]

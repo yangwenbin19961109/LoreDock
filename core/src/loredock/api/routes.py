@@ -1,6 +1,6 @@
 """Versioned HTTP adapter for LoreDock application use cases."""
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, File, Query, Request, Response, UploadFile, status
 
@@ -20,7 +20,9 @@ from loredock.api.contracts import (
     SourceResponse,
     VersionResponse,
 )
+from loredock.api.pagination import SourceCursor, decode_source_cursor, encode_source_cursor
 from loredock.application import LoreDockService
+from loredock.application.errors import AppError
 from loredock.version import API_VERSION, __version__
 
 router = APIRouter(prefix=f"/api/{API_VERSION}")
@@ -45,6 +47,18 @@ async def version() -> VersionResponse:
     """Return the desktop/Core compatibility handshake payload."""
 
     return VersionResponse(core_version=__version__, api_version=API_VERSION)
+
+
+@router.post("/desktop/shutdown", status_code=status.HTTP_202_ACCEPTED, tags=["system"])
+def desktop_shutdown(request: Request) -> None:
+    shutdown = request.app.state.desktop_shutdown
+    if shutdown is None:
+        raise AppError(
+            "desktop_shutdown_unavailable",
+            "Desktop shutdown is not available for this Core process.",
+            status_code=404,
+        )
+    shutdown()
 
 
 @router.post(
@@ -108,9 +122,39 @@ def import_source(
 @router.get(
     "/libraries/{library_id}/sources", response_model=Page[SourceResponse], tags=["sources"]
 )
-def list_sources(library_id: str, service: Service) -> Page[SourceResponse]:
-    items = [SourceResponse.model_validate(item) for item in service.list_sources(library_id)]
-    return Page(items=items, page=PageInfo(limit=50))
+def list_sources(
+    library_id: str,
+    service: Service,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    cursor: str | None = None,
+    filter_text: Annotated[str, Query(alias="filter", max_length=200)] = "",
+    sort: Literal["updated-desc", "name-asc", "size-desc"] = "updated-desc",
+) -> Page[SourceResponse]:
+    normalized_filter = filter_text.strip().casefold()
+    decoded = (
+        decode_source_cursor(cursor, sort=sort, filter_text=normalized_filter) if cursor else None
+    )
+    records, has_more = service.list_sources_page(
+        library_id,
+        limit=limit,
+        filter_text=normalized_filter,
+        sort=sort,
+        after_value=decoded.value if decoded else None,
+        after_id=decoded.source_id if decoded else None,
+    )
+    next_cursor = None
+    if has_more and records:
+        last = records[-1]
+        key: str | int
+        if sort == "updated-desc":
+            key = last.updated_at
+        elif sort == "name-asc":
+            key = last.name
+        else:
+            key = last.size_bytes
+        next_cursor = encode_source_cursor(SourceCursor(sort, normalized_filter, key, last.id))
+    items = [SourceResponse.model_validate(item) for item in records]
+    return Page(items=items, page=PageInfo(limit=limit, next_cursor=next_cursor))
 
 
 @router.get("/sources/{source_id}", response_model=SourceResponse, tags=["sources"])

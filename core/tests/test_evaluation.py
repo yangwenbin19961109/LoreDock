@@ -1,4 +1,8 @@
+from pathlib import Path
+
 from loredock.evaluation.metrics import calculate_metrics
+from loredock.evaluation.runner import load_cases
+from loredock.ingestion.parsers import parse_path
 
 
 def test_metrics_cover_recall_rank_and_citations() -> None:
@@ -6,9 +10,47 @@ def test_metrics_cover_recall_rank_and_citations() -> None:
         [{"a"}, {"c"}],
         [["a", "b"], ["b", "c"]],
         [[True, True], [True, False]],
+        [[True, False], [False, True]],
+        [[100, 200], [300, 400]],
+        [["p1", "p2"], ["p3", "p3"]],
     )
 
     assert metrics.recall_at_k == 1.0
     assert metrics.first_result_accuracy == 0.5
     assert metrics.mean_reciprocal_rank == 0.75
     assert metrics.citation_accuracy == 0.75
+    assert metrics.context_precision == 0.5
+    assert metrics.expected_passage_coverage == 1.0
+    assert metrics.average_context_chars == 250
+    assert metrics.duplicate_context_rate == 0.25
+
+
+def test_checked_in_evaluation_batch_has_unique_case_ids() -> None:
+    cases_path = Path(__file__).resolve().parents[2] / "evals" / "fixtures" / "cases.json"
+    cases = load_cases(cases_path)
+
+    assert len(cases) == 100
+    assert len({case["id"] for case in cases}) == len(cases)
+
+
+def test_expected_passages_exist_in_an_expected_source() -> None:
+    fixtures = Path(__file__).resolve().parents[2] / "evals" / "fixtures"
+    cases = load_cases(fixtures / "cases.json")
+    documents = {
+        path.stem: parse_path(path).text
+        for path in (fixtures / "documents").iterdir()
+        if path.suffix.lower() in {".md", ".markdown", ".txt", ".pdf", ".docx"}
+    }
+
+    invalid_cases = [
+        case["id"]
+        for case in cases
+        if case["expected_passages"]
+        and not any(
+            passage in documents.get(source_id, "")
+            for source_id in case["expected_sources"]
+            for passage in case["expected_passages"]
+        )
+    ]
+
+    assert invalid_cases == []

@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     port: int = Field(default=49321, ge=1024, le=65535)
     log_level: str = "info"
     data_dir: Path | None = None
+    model_dir: Path | None = None
+    desktop_token: SecretStr | None = None
 
     def resolved_data_dir(self) -> Path:
         return (self.data_dir or Path.cwd() / "data").resolve()

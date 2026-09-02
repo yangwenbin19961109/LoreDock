@@ -26,6 +26,7 @@ LoreDock 是一个轻量、本地优先的个人知识库。它帮助普通用�
 
 - [技术架构与开发方案](docs/technical-architecture.md)
 - [分阶段开发计划](docs/development-plan.md)
+- [当前开发进度与下一步](docs/current-progress.md)
 - [开发环境与质量检查](docs/development-setup.md)
 - [HTTP API 契约](docs/api-contracts.md)
 - [架构决策记录](docs/decisions/README.md)
@@ -37,7 +38,7 @@ LoreDock 是一个轻量、本地优先的个人知识库。它帮助普通用�
 
 ## 当前状态
 
-Phase 0 工程基础已经建立，Phase 1 检索实验管线可重复运行。Phase 2 Core MVP 已形成可用 HTTP 闭环：可以创建知识库、导入 Markdown/TXT/PDF/DOCX、去重、索引、混合搜索、读取精确引用并删除资料。真实 ONNX 模型评测和面向普通用户的管理 UI 仍在后续阶段。
+Phase 0～2 Core 闭环和 Phase 2.5 分层混合检索主路径已经完成。Phase 3 已完成前六批：三栏知识库 UI、资料管理与搜索、服务端游标分页、Tauri Core 生命周期，以及 Windows 独立 Core、MSI 和 NSIS 本地验收包构建。下一步是 Core 异常恢复与用户可见诊断；安装包签名、跨平台验证和 MCP 接入尚未完成。
 
 初始化开发环境：
 

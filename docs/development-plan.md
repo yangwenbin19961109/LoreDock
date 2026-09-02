@@ -20,6 +20,7 @@
 | Phase 0 | 工程基础与契约 | 1～2 周 | Monorepo、CI、API/数据契约、ADR |
 | Phase 1 | 检索实验与评测基线 | 2～3 周 | 评测集、解析/分块原型、性能报告 |
 | Phase 2 | LoreDock Core MVP | 4～6 周 | 知识库、来源、任务、索引、搜索 API |
+| Phase 2.5 | 分层上下文检索优化 | 1～2 周 | Parent/Child 索引、按需上下文扩展、质量评测 |
 | Phase 3 | 桌面端 MVP | 4～6 周 | Tauri 桌面应用、资料管理和搜索 UI |
 | Phase 4 | MCP 与 Agent 接入 | 2～4 周 | MCP Server、连接向导、Codex/Cursor 验证 |
 | Phase 5 | 完整资料处理能力 | 3～5 周 | 更多格式、URL、OCR 可选组件、文件夹监听 |
@@ -161,7 +162,40 @@
 - 更换模型或分块契约时可以后台重建并安全切换索引。
 - 单元、集成、迁移和 API 契约测试通过。
 
+## 5A. Phase 2.5：分层上下文检索优化
+
+### 5A.1 目标与排期
+
+在 Phase 2 的混合检索闭环之上，引入 Parent/Child 分层上下文模型：继续以较小的 Child Chunk 执行 BM25 与向量召回，在命中后按需补充所属 Parent Section 或相邻 Child，使结果既能准确命中，又能提供足够完整的回答上下文。
+
+当前状态：v3 索引、结构化 Parent/Child、按需上下文扩展、兼容 API 字段和基础评测指标已经落地；multilingual-e5-small INT8 ONNX 已完成接入，第二批评测已扩展到 14 份资料和 100 条，并完成 Child-only、相邻 Child、Parent 与 BM25-only 的同集对照。继续扩充到 200～500 条跨 Child 问题和完成目标规模性能验证仍是阶段验收前置项。
+
+本阶段安排在 Phase 2 Core MVP 与真实 Embedding 基线可运行之后、Phase 4 MCP 结果契约冻结之前。数据结构和 API 契约工作可与 Phase 3 早期的非搜索 UI 并行；搜索 UI 与 MCP 接入必须等待本阶段的结果结构稳定。
+
+### 5A.2 工作项
+
+1. 扩充评测集，覆盖长篇结构化文档、短笔记、FAQ、表格和代码，并标注期望命中片段与所需上下文范围。
+2. 定义 Parent Section 记录，以及 Child Chunk 的 `parent_id`、顺序号、前后相邻引用和稳定定位字段。
+3. 按文档类型实现可替换的 Parent 构建策略；短文档允许维持扁平 Chunk，不强制制造层级。
+4. 提升索引 build contract 版本，并实现从旧索引安全重建；原始资料与稳定 Source ID 不随索引升级改变。
+5. 实现检索流水线：Child FTS/Vector 召回 → RRF → 去重与 Parent 分组 → 条件化上下文扩展 → 可选 Rerank → 上下文裁剪。
+6. 扩展搜索结果契约，区分 `matched_chunk_id`、`context_id`、命中范围与返回上下文范围，同时保持精确引用指向实际命中的 Child。
+7. 设置单次搜索的扩展数量、总 token、重复内容和单 Parent 占比上限，防止长章节淹没其他结果。
+8. 确保 BM25-only 降级路径仍可使用相同的 Parent/相邻块扩展能力。
+9. 为 UI 与 MCP 提供有界的上下文和后续读取句柄，不默认返回整篇文档。
+
+### 5A.3 验收条件
+
+- 在同一评测集上，上下文完整度明显优于纯 Child 返回，且 Recall@10 与引用来源正确率不低于 Phase 1 基线。
+- 记录 Context Precision、平均返回 token、重复率、P95 延迟和索引体积；阈值以评测报告为依据，不凭个别示例确定。
+- 短笔记和其他扁平资料无需额外 Parent 层也能正常检索。
+- 旧 build contract 的索引可安全重建为新版本，原始资料、Source ID 和用户元数据不受影响。
+- 1 万分块目标设备上的搜索 P95 仍不高于 1 秒，并单独报告上下文扩展的延迟开销。
+- 新增 API 字段有契约测试；旧客户端可忽略新增字段，不引入无版本计划的破坏性变更。
+
 ## 6. Phase 3：桌面端 MVP
+
+当前状态：前六批 UI 与桌面能力已接入真实 Core，并按既有渲染图形成左侧导航、中间资料列表、右侧预览详情的三栏结构；资料管理、检索、预览和 Core keyset 游标分页已经落地。Tauri 已支持动态端口、进程令牌、版本握手和优雅关闭；Windows 独立 Core、resource 装配、MSI 与 NSIS 构建及发行目录烟雾测试已通过。富文档版面预览、异常恢复、代码签名、安装升级矩阵以及 macOS/Linux 生命周期验证仍待后续批次完成。
 
 ### 6.1 目标
 
@@ -314,18 +348,20 @@
 Phase 0 工程基础
    └── Phase 1 检索验证
           └── Phase 2 Core MVP
-                 ├── Phase 3 桌面端 MVP
-                 ├── Phase 4 MCP 接入
-                 └── Phase 5 资料能力扩展
-                        └── Phase 6 服务器/Web
-                               └── Phase 7 发布
+                 └── Phase 2.5 分层上下文检索
+                        ├── Phase 3 桌面端 MVP
+                        ├── Phase 4 MCP 接入
+                        └── Phase 5 资料能力扩展
+                               └── Phase 6 服务器/Web
+                                      └── Phase 7 发布
 ```
 
 可并行项：
 
 - Phase 1 期间可以并行建立设计 Token 和基础 UI 组件，但不能提前固化未验证的数据结构。
-- Phase 2 API 稳定后，桌面端和 MCP 可由不同开发者并行。
-- Phase 5 的解析器可以按格式独立开发。
+- Phase 2.5 的数据契约和评测可与 Phase 3 早期的非搜索 UI 并行，但搜索结果结构必须在搜索 UI 和 MCP 实现前稳定。
+- Phase 2.5 完成后，桌面端搜索和 MCP 可由不同开发者并行。
+- Phase 5 的解析器和 Parent 构建器可以按格式独立开发。
 - Phase 7 的安全测试、文档和打包可以在 Phase 3 后持续进行，而不是最后才开始。
 
 ## 12. 每阶段统一完成定义
@@ -341,19 +377,15 @@ Phase 0 工程基础
 7. 没有将密钥、本地数据库、模型缓存或私人资料提交到仓库。
 8. 已记录未验证平台和已知限制。
 
-## 13. 第一轮执行顺序
+## 13. 下一轮执行顺序
 
-项目当前应从 Phase 0 开始，推荐按以下小步提交：
+Phase 0～2 已建立工程、资料管理和基础检索闭环，Phase 2.5 的功能主路径与 100 条质量基线已经完成，Phase 3 已完成前六批桌面功能和 Windows 本地验收包。下一轮按以下顺序继续：
 
-1. `chore(repo): scaffold monorepo and toolchains`
-2. `chore(ci): add lint typecheck and test workflows`
-3. `docs(adr): record core and storage decisions`
-4. `feat(core): add health and version endpoints`
-5. `feat(storage): add app database and migrations`
-6. `test(evals): add retrieval evaluation fixture format`
-7. `feat(ingestion): add markdown and text parsing prototype`
-8. `feat(search): add fts baseline`
-9. `feat(models): add local embedding prototype`
-10. `feat(search): add vector and rrf evaluation pipeline`
+1. 将评测扩展到 200～500 条，重点补充跨 Child 前提、表格、代码作用域和真实复杂 PDF/DOCX。
+2. 在 1 万真实 E5 分块下记录索引耗时、冷启动、峰值内存、索引体积、搜索 P95 和上下文扩展开销。
+3. 根据固定数据决定 Parent 的条件化触发规则、上下文总预算和最终默认策略。
+4. 为结果预算、跨 Child 扩展和迁移失败增加集成测试。
+5. 增加 Core 异常退出后的有界自动恢复和用户可见诊断。
+6. 在干净 Windows 虚拟机完成安装、升级、卸载和数据保留矩阵，再开展代码签名与 macOS/Linux 生命周期验证。
 
 每一步都应保持仓库可构建、可测试，并避免一次提交同时引入脚手架、领域模型、数据库和 UI 大量代码。

@@ -38,7 +38,12 @@ def test_http_api_completes_knowledge_round_trip(tmp_path: Path) -> None:
         json={"query": "exact citation ranges"},
     )
     assert searched.status_code == 200
-    assert searched.json()["items"][0]["source_id"] == source_id
+    result = searched.json()["items"][0]
+    assert result["source_id"] == source_id
+    assert result["matched_chunk_id"] == result["chunk_id"]
+    assert result["context_id"]
+    assert result["matched_range"]["char_start"] == result["char_start"]
+    assert "citation ranges" in result["context_text"]
 
     content = client.get(f"/api/v1/sources/{source_id}/content")
     assert content.status_code == 200

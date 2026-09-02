@@ -1,0 +1,9 @@
+{
+  "bundle": {
+    "active": true,
+    "icon": ["icons/icon.ico"],
+    "resources": {
+      "../../../core/dist/loredock-core/": "core/"
+    }
+  }
+}

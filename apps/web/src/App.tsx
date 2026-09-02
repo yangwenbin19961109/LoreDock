@@ -1,58 +1,940 @@
-import { coreEndpoint, type HealthResponse } from '@loredock/contracts'
+import type { FormEvent, ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+
+import type {
+  CitationRange,
+  Job,
+  Library,
+  LibraryId,
+  SearchResult,
+  Source,
+  SourceContentResponse,
+  SourceId,
+  SourceImportResponse
+} from '@loredock/contracts'
 import { Button } from '@loredock/ui'
-import { useEffect, useState } from 'react'
+
+import { coreApi } from './api'
+import type { SourceListOptions } from './api'
 
 type CoreState = 'checking' | 'ready' | 'offline'
+type DetailTab = 'preview' | 'details'
+type SourceSort = NonNullable<SourceListOptions['sort']>
+const SOURCE_PAGE_SIZE = 10
+type DeleteTarget =
+  | { readonly kind: 'library'; readonly id: LibraryId; readonly name: string }
+  | { readonly kind: 'source'; readonly id: SourceId; readonly name: string }
 
-async function fetchHealth(signal: AbortSignal): Promise<HealthResponse> {
-  const response = await fetch(coreEndpoint('health'), { signal })
-  if (!response.ok) {
-    throw new Error(`Core health check failed with ${response.status}`)
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`
+}
+
+function formatDate(value: string): string {
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(new Date(value))
+}
+
+function sourceStatus(status: string): string {
+  const labels: Record<string, string> = {
+    pending: '等待处理',
+    parsing: '正在解析',
+    chunking: '正在分块',
+    embedding: '正在索引',
+    succeeded: '可以搜索',
+    ready: '可以搜索',
+    failed: '处理失败'
   }
-  return (await response.json()) as HealthResponse
+  return labels[status] ?? status
+}
+
+function HighlightedText({
+  content,
+  range
+}: {
+  readonly content: SourceContentResponse
+  readonly range?: CitationRange
+}): ReactNode {
+  if (!range) return content.text
+  const start = Math.max(0, range.char_start - content.char_start)
+  const end = Math.min(content.text.length, range.char_end - content.char_start)
+  if (start >= end) return content.text
+  return (
+    <>
+      {content.text.slice(0, start)}
+      <mark>{content.text.slice(start, end)}</mark>
+      {content.text.slice(end)}
+    </>
+  )
 }
 
 export function App() {
   const [coreState, setCoreState] = useState<CoreState>('checking')
   const [coreVersion, setCoreVersion] = useState<string>()
+  const [libraries, setLibraries] = useState<readonly Library[]>([])
+  const [selectedId, setSelectedId] = useState<LibraryId>()
+  const [sources, setSources] = useState<readonly Source[]>([])
+  const [sourceFilter, setSourceFilter] = useState('')
+  const [sourceSort, setSourceSort] = useState<SourceSort>('updated-desc')
+  const [sourceCursor, setSourceCursor] = useState<string>()
+  const [sourceCursorHistory, setSourceCursorHistory] = useState<readonly string[]>([])
+  const [nextSourceCursor, setNextSourceCursor] = useState<string>()
+  const [jobs, setJobs] = useState<Readonly<Record<string, Job>>>({})
+  const [selectedSourceId, setSelectedSourceId] = useState<SourceId>()
+  const [sourceContent, setSourceContent] = useState<SourceContentResponse>()
+  const [highlightRange, setHighlightRange] = useState<CitationRange>()
+  const [detailTab, setDetailTab] = useState<DetailTab>('preview')
+  const [showCreate, setShowCreate] = useState(false)
+  const [showRename, setShowRename] = useState(false)
+  const [libraryName, setLibraryName] = useState('')
+  const [renameName, setRenameName] = useState('')
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>()
+  const [busy, setBusy] = useState(false)
+  const [query, setQuery] = useState('')
+  const [lexicalOnly, setLexicalOnly] = useState(false)
+  const [searching, setSearching] = useState(false)
+  const [hasSearched, setHasSearched] = useState(false)
+  const [results, setResults] = useState<readonly SearchResult[]>([])
+  const [expandedContexts, setExpandedContexts] = useState<ReadonlySet<string>>(new Set())
+  const [error, setError] = useState<string>()
+  const fileInput = useRef<HTMLInputElement>(null)
+
+  const selectedLibrary = libraries.find((library) => library.id === selectedId)
+  const selectedSource = sources.find((source) => source.id === selectedSourceId)
+  const sourcePage = sourceCursorHistory.length + 1
+  const activeJobs = useMemo(
+    () => Object.values(jobs).filter((job) => !['succeeded', 'failed'].includes(job.status)),
+    [jobs]
+  )
 
   useEffect(() => {
     const controller = new AbortController()
-    void fetchHealth(controller.signal)
-      .then((health) => {
+    void Promise.all([coreApi.health(controller.signal), coreApi.listLibraries(controller.signal)])
+      .then(([health, page]) => {
         setCoreVersion(health.version)
+        setLibraries(page.items)
+        setSelectedId(page.items[0]?.id)
         setCoreState('ready')
       })
-      .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === 'AbortError') return
+      .catch((reason: unknown) => {
+        if (reason instanceof DOMException && reason.name === 'AbortError') return
         setCoreState('offline')
+        setError('无法连接 LoreDock Core，请确认核心服务已经启动。')
       })
     return () => controller.abort()
   }, [])
 
+  useEffect(() => {
+    if (!selectedId) return
+    const controller = new AbortController()
+    void coreApi
+      .listSources(
+        selectedId,
+        {
+          limit: SOURCE_PAGE_SIZE,
+          sort: sourceSort,
+          ...(sourceCursor ? { cursor: sourceCursor } : {}),
+          ...(sourceFilter.trim() ? { filter: sourceFilter.trim() } : {})
+        },
+        controller.signal
+      )
+      .then((page) => {
+        setSources(page.items)
+        setNextSourceCursor(page.page.next_cursor ?? undefined)
+        setSelectedSourceId(page.items[0]?.id)
+      })
+      .catch((reason: unknown) => {
+        if (reason instanceof DOMException && reason.name === 'AbortError') return
+        setError(reason instanceof Error ? reason.message : '资料列表加载失败。')
+      })
+    return () => controller.abort()
+  }, [selectedId, sourceCursor, sourceFilter, sourceSort])
+
+  useEffect(() => {
+    if (!selectedSourceId) return
+    const controller = new AbortController()
+    void coreApi
+      .readSource(selectedSourceId, controller.signal)
+      .then(setSourceContent)
+      .catch((reason: unknown) => {
+        if (reason instanceof DOMException && reason.name === 'AbortError') return
+        setError(reason instanceof Error ? reason.message : '原文读取失败。')
+      })
+    return () => controller.abort()
+  }, [selectedSourceId])
+
+  useEffect(() => {
+    if (activeJobs.length === 0) return
+    const timer = window.setInterval(() => {
+      void Promise.all(activeJobs.map((job) => coreApi.getJob(job.id))).then((updated) => {
+        setJobs((current) => {
+          const next = { ...current }
+          for (const job of updated) {
+            if (job.source_id) next[job.source_id] = job
+          }
+          return next
+        })
+      })
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [activeJobs])
+
+  function resetSelection(): void {
+    setSelectedSourceId(undefined)
+    setSourceContent(undefined)
+    setHighlightRange(undefined)
+    setDetailTab('preview')
+    setQuery('')
+    setResults([])
+    setHasSearched(false)
+    setExpandedContexts(new Set())
+  }
+
+  function selectLibrary(libraryId: LibraryId): void {
+    resetSelection()
+    setSources([])
+    setSourceFilter('')
+    setSourceSort('updated-desc')
+    setSourceCursor(undefined)
+    setSourceCursorHistory([])
+    setNextSourceCursor(undefined)
+    setSelectedId(libraryId)
+  }
+
+  function selectSource(sourceId: SourceId, range?: CitationRange): void {
+    if (sourceId !== selectedSourceId) {
+      setSelectedSourceId(sourceId)
+      setSourceContent(undefined)
+    }
+    setHighlightRange(range)
+    setDetailTab('preview')
+  }
+
+  async function createLibrary(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault()
+    const name = libraryName.trim()
+    if (!name) return
+    setBusy(true)
+    setError(undefined)
+    try {
+      const library = await coreApi.createLibrary(name)
+      setLibraries((current) => [...current, library])
+      selectLibrary(library.id)
+      setLibraryName('')
+      setShowCreate(false)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '知识库创建失败。')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function renameLibrary(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault()
+    const name = renameName.trim()
+    if (!selectedId || !name) return
+    setBusy(true)
+    setError(undefined)
+    try {
+      const updated = await coreApi.renameLibrary(selectedId, name)
+      setLibraries((current) =>
+        current.map((library) => (library.id === updated.id ? updated : library))
+      )
+      setShowRename(false)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '知识库重命名失败。')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function confirmDelete(): Promise<void> {
+    if (!deleteTarget) return
+    setBusy(true)
+    setError(undefined)
+    try {
+      if (deleteTarget.kind === 'library') {
+        await coreApi.deleteLibrary(deleteTarget.id)
+        const remaining = libraries.filter((library) => library.id !== deleteTarget.id)
+        setLibraries(remaining)
+        resetSelection()
+        setSources([])
+        setSelectedId(remaining[0]?.id)
+      } else {
+        await coreApi.deleteSource(deleteTarget.id)
+        const remaining = sources.filter((source) => source.id !== deleteTarget.id)
+        setSources(remaining)
+        setSourceCursor(undefined)
+        setSourceCursorHistory([])
+        setResults((current) => current.filter((result) => result.source_id !== deleteTarget.id))
+        setJobs((current) => {
+          const next = { ...current }
+          delete next[deleteTarget.id]
+          return next
+        })
+        if (selectedSourceId === deleteTarget.id) {
+          setSelectedSourceId(undefined)
+          setSourceContent(undefined)
+          setHighlightRange(undefined)
+          if (remaining[0]) selectSource(remaining[0].id)
+        }
+      }
+      setDeleteTarget(undefined)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '删除失败。')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function importFiles(files: FileList | null): Promise<void> {
+    if (!selectedId || !files?.length) return
+    setBusy(true)
+    setError(undefined)
+    try {
+      const imported: SourceImportResponse[] = []
+      for (const file of Array.from(files))
+        imported.push(await coreApi.importSource(selectedId, file))
+      setJobs((current) => {
+        const next = { ...current }
+        for (const item of imported) next[item.source.id] = item.job
+        return next
+      })
+      const page = await coreApi.listSources(selectedId, { limit: SOURCE_PAGE_SIZE })
+      setSources(page.items)
+      setSourceFilter('')
+      setSourceSort('updated-desc')
+      setSourceCursor(undefined)
+      setSourceCursorHistory([])
+      setNextSourceCursor(page.page.next_cursor ?? undefined)
+      const firstSourceId = imported[0]?.source.id ?? page.items[0]?.id
+      if (firstSourceId) selectSource(firstSourceId)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '资料导入失败。')
+    } finally {
+      setBusy(false)
+      if (fileInput.current) fileInput.current.value = ''
+    }
+  }
+
+  async function search(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault()
+    const normalizedQuery = query.trim()
+    if (!selectedId || !normalizedQuery) return
+    setSearching(true)
+    setError(undefined)
+    try {
+      const response = await coreApi.search(selectedId, {
+        query: normalizedQuery,
+        limit: 8,
+        lexical_only: lexicalOnly
+      })
+      setResults(response.items)
+      setExpandedContexts(new Set())
+      setHasSearched(true)
+      if (response.items[0])
+        selectSource(response.items[0].source_id, response.items[0].matched_range)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '搜索失败。')
+    } finally {
+      setSearching(false)
+    }
+  }
+
+  async function retrySource(sourceId: SourceId): Promise<void> {
+    const job = jobs[sourceId]
+    if (!job) return
+    setError(undefined)
+    try {
+      const updated = await coreApi.retryJob(job.id)
+      setJobs((current) => ({ ...current, [sourceId]: updated }))
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '任务重试失败。')
+    }
+  }
+
+  function toggleContext(contextId: string): void {
+    setExpandedContexts((current) => {
+      const next = new Set(current)
+      if (next.has(contextId)) next.delete(contextId)
+      else next.add(contextId)
+      return next
+    })
+  }
+
   return (
-    <main className="welcome-shell">
-      <section className="welcome-card" aria-labelledby="welcome-title">
-        <img className="brand-mark" src="/loredock-icon.png" alt="" />
-        <p className="eyebrow">LOREDOCK · 知坞</p>
-        <h1 id="welcome-title">把知识安放好，再交给 Agent 使用。</h1>
-        <p className="welcome-copy">
-          Phase 0 工程骨架已经就绪。接下来将验证文档解析、混合检索和精确引用。
-        </p>
+    <main className="app-shell">
+      <aside className="sidebar">
+        <div className="brand-row">
+          <img className="brand-mark" src="/loredock-icon.png" alt="" />
+          <strong>LoreDock</strong>
+        </div>
+        <nav className="main-nav" aria-label="主导航">
+          <button className="nav-item nav-item--active" type="button">
+            <span>▣</span>全部知识库
+          </button>
+          <button className="nav-item" type="button" disabled>
+            <span>◷</span>最近使用
+          </button>
+          <button className="nav-item" type="button" disabled>
+            <span>☆</span>收藏
+          </button>
+          <button className="nav-item" type="button" disabled>
+            <span>◎</span>Agent 连接
+          </button>
+          <button className="nav-item" type="button" disabled>
+            <span>⚙</span>设置
+          </button>
+        </nav>
+        <div className="sidebar-heading">
+          <span>我的知识库</span>
+          <button
+            className="icon-button"
+            type="button"
+            aria-label="创建知识库"
+            onClick={() => setShowCreate(true)}
+            disabled={coreState !== 'ready'}
+          >
+            +
+          </button>
+        </div>
+        <nav className="library-list" aria-label="知识库列表">
+          {libraries.map((library) => (
+            <button
+              className={`library-item ${library.id === selectedId ? 'library-item--active' : ''}`}
+              type="button"
+              key={library.id}
+              onClick={() => selectLibrary(library.id)}
+            >
+              <span className="library-glyph">▤</span>
+              <span>
+                <strong>{library.name}</strong>
+                <small>{library.id === selectedId ? `${sources.length} 份资料` : '知识库'}</small>
+              </span>
+            </button>
+          ))}
+          {coreState === 'ready' && libraries.length === 0 && (
+            <p className="sidebar-empty">还没有知识库</p>
+          )}
+        </nav>
         <div className={`core-status core-status--${coreState}`} role="status">
           <span className="status-dot" aria-hidden="true" />
-          {coreState === 'checking' && '正在连接 LoreDock Core'}
-          {coreState === 'ready' && `LoreDock Core ${coreVersion ?? ''} 已连接`}
-          {coreState === 'offline' && 'LoreDock Core 尚未启动'}
+          {coreState === 'checking' && '正在连接 Core'}
+          {coreState === 'ready' && `Core ${coreVersion ?? ''} 已连接`}
+          {coreState === 'offline' && 'Core 未连接'}
         </div>
-        <div className="welcome-actions">
-          <Button disabled>创建知识库</Button>
-          <Button variant="secondary" disabled>
-            导入资料
-          </Button>
-        </div>
-        <p className="phase-note">功能将在后续阶段启用；当前页面仅验证应用边界与设计系统。</p>
+      </aside>
+
+      <section className="work-area">
+        <header className="topbar">
+          <div>
+            <p className="eyebrow">知识库</p>
+            <h1>{selectedLibrary?.name ?? '开始使用 LoreDock'}</h1>
+          </div>
+          <div className="topbar-actions">
+            {selectedLibrary && (
+              <>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setRenameName(selectedLibrary.name)
+                    setShowRename(true)
+                  }}
+                  disabled={busy}
+                >
+                  重命名
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="danger-action"
+                  onClick={() =>
+                    setDeleteTarget({
+                      kind: 'library',
+                      id: selectedLibrary.id,
+                      name: selectedLibrary.name
+                    })
+                  }
+                  disabled={busy}
+                >
+                  删除
+                </Button>
+              </>
+            )}
+            <Button variant="secondary" onClick={() => setShowCreate(true)} disabled={busy}>
+              创建知识库
+            </Button>
+            <Button onClick={() => fileInput.current?.click()} disabled={!selectedLibrary || busy}>
+              {busy ? '正在处理…' : '添加资料'}
+            </Button>
+            <input
+              ref={fileInput}
+              className="visually-hidden"
+              type="file"
+              multiple
+              accept=".md,.markdown,.txt,.pdf,.docx"
+              onChange={(event) => void importFiles(event.target.files)}
+            />
+          </div>
+        </header>
+        {error && (
+          <div className="error-banner" role="alert">
+            <span>{error}</span>
+            <button type="button" onClick={() => setError(undefined)} aria-label="关闭错误提示">
+              ×
+            </button>
+          </div>
+        )}
+
+        {!selectedLibrary ? (
+          <section className="empty-state">
+            <div className="empty-symbol">◇</div>
+            <h2>创建你的第一个知识库</h2>
+            <p>把分散的 Markdown、TXT、PDF 和 DOCX 资料集中管理，稍后即可搜索和连接 Agent。</p>
+            <Button onClick={() => setShowCreate(true)} disabled={coreState !== 'ready'}>
+              创建知识库
+            </Button>
+          </section>
+        ) : (
+          <div className="workspace-grid">
+            <section className="center-column">
+              <form className="search-toolbar" onSubmit={(event) => void search(event)}>
+                <label className="visually-hidden" htmlFor="knowledge-query">
+                  搜索问题
+                </label>
+                <span className="search-icon">⌕</span>
+                <input
+                  id="knowledge-query"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="搜索这个知识库"
+                  maxLength={2000}
+                />
+                <label className="search-mode">
+                  <input
+                    type="checkbox"
+                    checked={lexicalOnly}
+                    onChange={(event) => setLexicalOnly(event.target.checked)}
+                  />
+                  仅全文
+                </label>
+                <Button type="submit" disabled={!query.trim() || searching}>
+                  {searching ? '搜索中…' : '搜索'}
+                </Button>
+              </form>
+              {hasSearched && (
+                <section className="search-results" aria-label="搜索结果">
+                  <div className="result-summary">
+                    {results.length === 0 ? '没有找到相关内容' : `${results.length} 条相关内容`}
+                  </div>
+                  {results.map((result) => {
+                    const source = sources.find((item) => item.id === result.source_id)
+                    const expanded = expandedContexts.has(result.context_id)
+                    const hasMore = result.context_text !== result.text
+                    return (
+                      <article
+                        className="result-card"
+                        key={`${result.matched_chunk_id}-${result.context_id}`}
+                        onClick={() => selectSource(result.source_id, result.matched_range)}
+                      >
+                        <div className="result-meta">
+                          <strong>{source?.name ?? '未知来源'}</strong>
+                          <span>{result.title_path.join(' / ') || '正文'}</span>
+                        </div>
+                        <p>{expanded ? result.context_text : result.text}</p>
+                        <div className="result-footer">
+                          <span>
+                            {result.page
+                              ? `第 ${result.page} 页`
+                              : `字符 ${result.matched_range.char_start}–${result.matched_range.char_end}`}
+                          </span>
+                          {hasMore && (
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                toggleContext(result.context_id)
+                              }}
+                            >
+                              {expanded ? '收起上下文' : '展开上下文'}
+                            </button>
+                          )}
+                        </div>
+                      </article>
+                    )
+                  })}
+                </section>
+              )}
+              <section className="content-panel">
+                <div className="panel-heading">
+                  <div>
+                    <h2>资料</h2>
+                    <p>
+                      {sources.length === 0
+                        ? '尚未导入资料'
+                        : sourceFilter
+                          ? `当前页 ${sources.length} 份匹配资料`
+                          : `第 ${sourcePage} 页，共 ${sources.length} 份资料`}
+                    </p>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    onClick={() => fileInput.current?.click()}
+                    disabled={busy}
+                  >
+                    ＋ 添加资料
+                  </Button>
+                </div>
+                {sources.length === 0 ? (
+                  <button
+                    className="drop-zone"
+                    type="button"
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={(event) => {
+                      event.preventDefault()
+                      void importFiles(event.dataTransfer.files)
+                    }}
+                    onClick={() => fileInput.current?.click()}
+                    disabled={busy}
+                  >
+                    <span className="drop-icon">⇧</span>
+                    <strong>拖放或选择资料</strong>
+                    <span>支持 Markdown、TXT、PDF 和 DOCX</span>
+                  </button>
+                ) : (
+                  <>
+                    <div className="list-toolbar">
+                      <input
+                        aria-label="筛选资料"
+                        value={sourceFilter}
+                        placeholder="按名称、类型或状态筛选"
+                        onChange={(event) => {
+                          setSourceFilter(event.target.value)
+                          setSourceCursor(undefined)
+                          setSourceCursorHistory([])
+                          setNextSourceCursor(undefined)
+                        }}
+                      />
+                      <select
+                        aria-label="资料排序方式"
+                        value={sourceSort}
+                        onChange={(event) => {
+                          setSourceSort(event.target.value as SourceSort)
+                          setSourceCursor(undefined)
+                          setSourceCursorHistory([])
+                          setNextSourceCursor(undefined)
+                        }}
+                      >
+                        <option value="updated-desc">最近更新</option>
+                        <option value="name-asc">名称 A–Z</option>
+                        <option value="size-desc">文件大小</option>
+                      </select>
+                    </div>
+                    {sources.length === 0 ? (
+                      <div className="filter-empty">没有符合当前筛选条件的资料。</div>
+                    ) : (
+                      <div className="source-table" role="table" aria-label="资料列表">
+                        <div className="source-row source-row--header" role="row">
+                          <span>名称</span>
+                          <span>状态</span>
+                          <span>更新时间</span>
+                          <span>大小</span>
+                        </div>
+                        {sources.map((source) => {
+                          const job = jobs[source.id]
+                          const status =
+                            job?.status === 'succeeded' ? 'ready' : (job?.status ?? source.status)
+                          return (
+                            <button
+                              className={`source-row ${source.id === selectedSourceId ? 'source-row--selected' : ''}`}
+                              type="button"
+                              role="row"
+                              key={source.id}
+                              onClick={() => selectSource(source.id)}
+                            >
+                              <span className="source-name">
+                                <span className="file-glyph">▱</span>
+                                <strong>{source.name}</strong>
+                              </span>
+                              <span className={`status-pill status-pill--${status}`}>
+                                {sourceStatus(status)}
+                                {job && !['succeeded', 'failed'].includes(job.status)
+                                  ? ` ${Math.round(job.progress * 100)}%`
+                                  : ''}
+                              </span>
+                              <span>{formatDate(source.updated_at)}</span>
+                              <span>{formatBytes(source.size_bytes)}</span>
+                              {job?.status === 'failed' && (
+                                <span
+                                  className="row-action"
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    void retrySource(source.id)
+                                  }}
+                                >
+                                  重试
+                                </span>
+                              )}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                    <nav className="pagination" aria-label="资料分页">
+                      <button
+                        type="button"
+                        disabled={sourceCursorHistory.length === 0}
+                        onClick={() => {
+                          const previous = sourceCursorHistory.at(-1)
+                          setSourceCursor(previous || undefined)
+                          setSourceCursorHistory((history) => history.slice(0, -1))
+                        }}
+                      >
+                        上一页
+                      </button>
+                      <span>
+                        第 {sourcePage} 页 · 每页 {SOURCE_PAGE_SIZE} 条
+                      </span>
+                      <button
+                        type="button"
+                        disabled={!nextSourceCursor}
+                        onClick={() => {
+                          if (!nextSourceCursor) return
+                          setSourceCursorHistory((history) => [...history, sourceCursor ?? ''])
+                          setSourceCursor(nextSourceCursor)
+                        }}
+                      >
+                        下一页
+                      </button>
+                    </nav>
+                  </>
+                )}
+              </section>
+            </section>
+
+            <aside className="detail-pane" aria-label="资料详情">
+              {!selectedSource ? (
+                <div className="detail-empty">
+                  <span>▱</span>
+                  <p>选择资料后可在这里预览原文和引用信息。</p>
+                </div>
+              ) : (
+                <>
+                  <div className="detail-header">
+                    <div className="detail-title">
+                      <span className="file-glyph">▱</span>
+                      <div>
+                        <strong>{selectedSource.name}</strong>
+                        <span className={`status-pill status-pill--${selectedSource.status}`}>
+                          {sourceStatus(selectedSource.status)}
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      className="detail-delete"
+                      type="button"
+                      onClick={() =>
+                        setDeleteTarget({
+                          kind: 'source',
+                          id: selectedSource.id,
+                          name: selectedSource.name
+                        })
+                      }
+                      disabled={busy}
+                    >
+                      删除资料
+                    </button>
+                  </div>
+                  <div className="detail-tabs">
+                    <button
+                      className={detailTab === 'preview' ? 'active' : ''}
+                      type="button"
+                      onClick={() => setDetailTab('preview')}
+                    >
+                      预览
+                    </button>
+                    <button
+                      className={detailTab === 'details' ? 'active' : ''}
+                      type="button"
+                      onClick={() => setDetailTab('details')}
+                    >
+                      详情
+                    </button>
+                  </div>
+                  {detailTab === 'preview' ? (
+                    <div className="document-preview">
+                      {sourceContent ? (
+                        <>
+                          {!selectedSource.media_type.startsWith('text/') && (
+                            <p className="preview-notice">
+                              此处显示从原文件安全提取的纯文本，原文件不会被修改。
+                            </p>
+                          )}
+                          <pre>
+                            <HighlightedText content={sourceContent} range={highlightRange} />
+                          </pre>
+                        </>
+                      ) : (
+                        <p>正在读取原文…</p>
+                      )}
+                    </div>
+                  ) : (
+                    <dl className="source-details">
+                      <div>
+                        <dt>文件类型</dt>
+                        <dd>{selectedSource.media_type}</dd>
+                      </div>
+                      <div>
+                        <dt>文件大小</dt>
+                        <dd>{formatBytes(selectedSource.size_bytes)}</dd>
+                      </div>
+                      <div>
+                        <dt>索引状态</dt>
+                        <dd>
+                          {sourceStatus(jobs[selectedSource.id]?.status ?? selectedSource.status)}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>添加时间</dt>
+                        <dd>{formatDate(selectedSource.created_at)}</dd>
+                      </div>
+                      <div>
+                        <dt>来源 ID</dt>
+                        <dd className="mono">{selectedSource.id}</dd>
+                      </div>
+                      {highlightRange && (
+                        <div>
+                          <dt>当前引用</dt>
+                          <dd>
+                            {highlightRange.page_start
+                              ? `第 ${highlightRange.page_start} 页`
+                              : `字符 ${highlightRange.char_start}–${highlightRange.char_end}`}
+                          </dd>
+                        </div>
+                      )}
+                    </dl>
+                  )}
+                </>
+              )}
+            </aside>
+          </div>
+        )}
       </section>
+
+      {showCreate && (
+        <div
+          className="dialog-backdrop"
+          role="presentation"
+          onMouseDown={() => setShowCreate(false)}
+        >
+          <form
+            className="dialog"
+            aria-labelledby="create-library-title"
+            onSubmit={(event) => void createLibrary(event)}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <p className="eyebrow">新建空间</p>
+            <h2 id="create-library-title">创建知识库</h2>
+            <p>给资料集合取一个容易辨认的名称，之后还可以修改。</p>
+            <label htmlFor="library-name">知识库名称</label>
+            <input
+              id="library-name"
+              autoFocus
+              maxLength={120}
+              value={libraryName}
+              onChange={(event) => setLibraryName(event.target.value)}
+              placeholder="例如：产品资料"
+            />
+            <div className="dialog-actions">
+              <Button type="button" variant="ghost" onClick={() => setShowCreate(false)}>
+                取消
+              </Button>
+              <Button type="submit" disabled={!libraryName.trim() || busy}>
+                {busy ? '正在创建…' : '创建'}
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {showRename && selectedLibrary && (
+        <div
+          className="dialog-backdrop"
+          role="presentation"
+          onMouseDown={() => setShowRename(false)}
+        >
+          <form
+            className="dialog"
+            aria-labelledby="rename-library-title"
+            onSubmit={(event) => void renameLibrary(event)}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <p className="eyebrow">知识库设置</p>
+            <h2 id="rename-library-title">重命名知识库</h2>
+            <p>资料和索引不会因为修改显示名称而重建。</p>
+            <label htmlFor="rename-library-name">知识库名称</label>
+            <input
+              id="rename-library-name"
+              autoFocus
+              maxLength={120}
+              value={renameName}
+              onChange={(event) => setRenameName(event.target.value)}
+            />
+            <div className="dialog-actions">
+              <Button type="button" variant="ghost" onClick={() => setShowRename(false)}>
+                取消
+              </Button>
+              <Button type="submit" disabled={!renameName.trim() || busy}>
+                {busy ? '正在保存…' : '保存'}
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div
+          className="dialog-backdrop"
+          role="presentation"
+          onMouseDown={() => setDeleteTarget(undefined)}
+        >
+          <section
+            className="dialog confirm-dialog"
+            role="alertdialog"
+            aria-labelledby="confirm-delete-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="warning-symbol">!</div>
+            <h2 id="confirm-delete-title">
+              确认删除{deleteTarget.kind === 'library' ? '知识库' : '资料'}？
+            </h2>
+            <p>
+              将删除“{deleteTarget.name}”
+              {deleteTarget.kind === 'library'
+                ? '及其全部资料、解析产物和索引。'
+                : '的可信副本、解析产物和全部索引记录。'}
+              此操作无法撤销。
+            </p>
+            <div className="dialog-actions">
+              <Button type="button" variant="ghost" onClick={() => setDeleteTarget(undefined)}>
+                取消
+              </Button>
+              <Button
+                type="button"
+                className="danger-button"
+                onClick={() => void confirmDelete()}
+                disabled={busy}
+              >
+                {busy ? '正在删除…' : '确认删除'}
+              </Button>
+            </div>
+          </section>
+        </div>
+      )}
     </main>
   )
 }

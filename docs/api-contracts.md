@@ -74,9 +74,41 @@ must not branch on free-form text.
 | `GET` | `/api/v1/jobs/{job_id}` | Read persistent indexing job state |
 | `POST` | `/api/v1/jobs/{job_id}/retry` | Retry a failed indexing job, up to three attempts |
 
+### Source list pagination
+
+`GET /api/v1/libraries/{library_id}/sources` accepts these optional query parameters:
+
+| Parameter | Contract |
+|---|---|
+| `limit` | Page size from 1 to 200; defaults to 50 |
+| `cursor` | Opaque continuation token returned by the preceding response |
+| `filter` | Case-insensitive literal match against name, media type, or processing status; maximum 200 characters |
+| `sort` | `updated-desc` (default), `name-asc`, or `size-desc` |
+
+Pagination uses stable keyset ordering with the source ID as a tie-breaker. A cursor is bound to the
+filter and sort values that created it; reusing it with different values returns
+`invalid_cursor`. Clients must treat cursor contents as opaque and restart from the first page when
+the filter or sort changes.
+
 The Phase 2 upload endpoint completes indexing before returning. Job state is persisted throughout
 the operation, interrupted jobs are recovered as failed at startup, and the same use case can move
 to a background worker without changing its HTTP result contracts.
 
 Supported uploads are Markdown, TXT, PDF and DOCX, with a 100 MiB per-file limit. A repeated content
 hash within the same library returns the existing source and job with `duplicate: true`.
+
+## Phase 2.5 search context fields
+
+Search keeps the Phase 2 `chunk_id`, `text`, `char_start`, and `char_end` fields as the precise
+ranked Child match. It adds the following compatible fields:
+
+- `matched_chunk_id`: explicit identifier of the Child used for ranking.
+- `parent_id`: structural Parent Section identifier when one exists.
+- `context_id`: stable Parent ID or bounded range handle used to deduplicate returned context.
+- `context_text`: bounded Parent or neighboring context; clients must still cite the matched range.
+- `matched_range`: page and character range for the ranked Child.
+- `context_range`: page and character range represented by `context_text`.
+
+Clients may ignore these additive fields. MCP and UI adapters should display or cite
+`matched_range`, use `context_text` for answer context, and request source content by range when
+more text is required. A search response never returns an entire large document by default.

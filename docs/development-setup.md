@@ -39,7 +39,30 @@ pnpm dev
 pnpm dev:desktop
 ```
 
-Core 默认监听 `127.0.0.1:49321`。该端口仅用于开发；正式桌面版由壳层选择空闲端口并通过一次性令牌约束本机访问。
+单独运行 Core 时默认监听 `127.0.0.1:49321`。`pnpm dev:desktop` 会自动使用仓库内的 Python 虚拟环境启动 Core，由 Tauri 选择动态回环端口、生成一次性令牌并在窗口关闭时请求优雅退出，因此无需同时执行 `pnpm dev:core`。
+
+设置 `LOREDOCK_CORE_EXECUTABLE` 可以测试独立 Core 可执行文件。Windows 可使用以下命令构建并验证不依赖系统 Python 的 Core，以及生成包含该 Core 的 MSI 和 NSIS 安装包：
+
+```powershell
+pnpm build:core:windows
+pnpm test:core:windows
+pnpm build:desktop:windows
+```
+
+生成目录 `core/dist/`、`core/build/` 和 Tauri `target/` 均被 Git 忽略。安装包尚未签名，不能直接作为正式下载版本发布。
+
+### 本地真实 Embedding
+
+开发测试默认使用确定性哈希 Provider，保证安装和 CI 不依赖网络。需要验证真实语义检索时执行：
+
+```powershell
+python -m uv run --directory core loredock-model install-e5 --directory models/multilingual-e5-small
+python -m uv run --directory core loredock-model smoke-e5 --directory models/multilingual-e5-small
+$env:LOREDOCK_MODEL_DIR = "models/multilingual-e5-small"
+pnpm dev:core
+```
+
+模型目录已被 Git 忽略。Core 启用真实模型后，Embedding 标识或维度变化会触发派生索引重建。
 
 ## 4. 质量检查
 

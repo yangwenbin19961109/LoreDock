@@ -11,6 +11,9 @@
 *.ico binary
 *.icns binary
 *.pdf binary
+*.docx binary
+*.pptx binary
+*.xlsx binary
 *.onnx binary
 *.sqlite binary
 *.sqlite3 binary

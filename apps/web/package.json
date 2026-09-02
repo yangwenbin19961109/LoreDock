@@ -13,6 +13,7 @@
   "dependencies": {
     "@loredock/contracts": "workspace:*",
     "@loredock/ui": "workspace:*",
+    "@tauri-apps/api": "^2.11.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

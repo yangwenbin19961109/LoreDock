@@ -16,11 +16,12 @@ from loredock.application.records import JobRecord, LibraryRecord, SourceContent
 from loredock.ingestion import parse_path
 from loredock.retrieval import (
     ChunkingConfig,
+    EmbeddingProvider,
     HashingEmbeddingProvider,
     HybridSearchIndex,
     SearchResult,
+    chunk_document_hierarchy,
 )
-from loredock.retrieval.chunking import chunk_document
 from loredock.storage import AppDatabase, DataLayout
 from loredock.storage.database import utc_timestamp
 
@@ -29,14 +30,112 @@ MAX_SOURCE_BYTES = 100 * 1024 * 1024
 
 
 class LoreDockService:
-    def __init__(self, data_dir: Path) -> None:
+    def __init__(self, data_dir: Path, provider: EmbeddingProvider | None = None) -> None:
         self.layout = DataLayout(data_dir)
         self.layout.initialize()
         self.database = AppDatabase(self.layout.root / "app.sqlite")
         self.database.recover_interrupted_jobs()
-        self.provider = HashingEmbeddingProvider()
+        self.provider = provider or HashingEmbeddingProvider()
         self.chunking = ChunkingConfig()
         self._lock = RLock()
+
+    def _manifest_payload(self) -> dict[str, object]:
+        return {
+            "schema_version": 3,
+            "embedding": {
+                "identifier": self.provider.identifier,
+                "dimensions": self.provider.dimensions,
+                "normalize": True,
+            },
+            "chunking": asdict(self.chunking),
+            "hierarchy": {
+                "version": 1,
+                "ranking_unit": "child",
+                "context_strategy": "bounded_parent_or_range",
+            },
+        }
+
+    def _write_manifest(self, library_id: str) -> None:
+        manifest = self.layout.library(library_id).manifest
+        temporary = manifest.with_suffix(".json.part")
+        temporary.write_text(
+            json.dumps(self._manifest_payload(), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        os.replace(temporary, manifest)
+
+    def _ensure_index_contract(self, library_id: str) -> None:
+        paths = self.layout.library(library_id)
+        if not paths.index.exists():
+            return
+        expected_metadata = {
+            "schema_version": "3",
+            "embedding_provider": self.provider.identifier,
+            "embedding_dimensions": str(self.provider.dimensions),
+            "embedding_normalized": "true",
+        }
+        actual_metadata: dict[str, str] = {}
+        connection: sqlite3.Connection | None = None
+        try:
+            connection = sqlite3.connect(paths.index)
+            actual_metadata = {
+                str(key): str(value)
+                for key, value in connection.execute("SELECT key, value FROM index_metadata")
+            }
+        except sqlite3.Error:
+            actual_metadata = {}
+        finally:
+            if connection is not None:
+                connection.close()
+        schema_version = None
+        if paths.manifest.exists():
+            try:
+                schema_version = json.loads(paths.manifest.read_text(encoding="utf-8")).get(
+                    "schema_version"
+                )
+            except (OSError, json.JSONDecodeError):
+                schema_version = None
+        if schema_version == 3 and actual_metadata == expected_metadata:
+            return
+        self._rebuild_library_index(library_id)
+
+    def _rebuild_library_index(self, library_id: str) -> None:
+        """Rebuild derived v3 data beside the active index, then switch atomically."""
+
+        paths = self.layout.library(library_id)
+        temporary = paths.index.with_name(f"{paths.index.name}.rebuild")
+        for candidate in (
+            temporary,
+            Path(f"{temporary}-wal"),
+            Path(f"{temporary}-shm"),
+        ):
+            candidate.unlink(missing_ok=True)
+        rows = self.database.connection.execute(
+            "SELECT id, suffix FROM sources WHERE library_id=? AND status='ready' ORDER BY id",
+            (library_id,),
+        ).fetchall()
+        try:
+            with HybridSearchIndex(temporary, self.provider) as index:
+                for row in rows:
+                    source_id = str(row["id"])
+                    raw_path = self.layout.source_raw_path(
+                        library_id, source_id, str(row["suffix"])
+                    )
+                    parsed = parse_path(raw_path, source_id=source_id, allowed_root=paths.raw)
+                    hierarchy = chunk_document_hierarchy(parsed, self.chunking)
+                    index.replace_source(source_id, hierarchy.chunks, hierarchy.parents)
+            for sidecar in (Path(f"{paths.index}-wal"), Path(f"{paths.index}-shm")):
+                sidecar.unlink(missing_ok=True)
+            os.replace(temporary, paths.index)
+            self._write_manifest(library_id)
+        except Exception:
+            for candidate in (
+                temporary,
+                Path(f"{temporary}-wal"),
+                Path(f"{temporary}-shm"),
+            ):
+                candidate.unlink(missing_ok=True)
+            raise
 
     def close(self) -> None:
         self.database.close()
@@ -175,6 +274,8 @@ class LoreDockService:
         self, library_id: str, filename: str, media_type: str | None, stream: BinaryIO
     ) -> tuple[SourceRecord, JobRecord, bool]:
         self.get_library(library_id)
+        with self._lock:
+            self._ensure_index_contract(library_id)
         safe_name = Path(filename.replace("\\", "/")).name
         suffix = Path(safe_name).suffix.lower()
         if suffix not in SUPPORTED_SUFFIXES:
@@ -264,23 +365,12 @@ class LoreDockService:
         artifact_path.write_text(parsed.text, encoding="utf-8")
         self._set_source_status(source_id, "chunking")
         self._set_job(job_id, "running", 0.5)
-        chunks = chunk_document(parsed, self.chunking)
+        hierarchy = chunk_document_hierarchy(parsed, self.chunking)
         self._set_source_status(source_id, "embedding")
         self._set_job(job_id, "running", 0.7)
         with HybridSearchIndex(paths.index, self.provider) as index:
-            index.replace_source(source_id, chunks)
-        manifest = {
-            "schema_version": 2,
-            "embedding": {
-                "identifier": self.provider.identifier,
-                "dimensions": self.provider.dimensions,
-                "normalize": True,
-            },
-            "chunking": asdict(self.chunking),
-        }
-        temporary = paths.manifest.with_suffix(".json.part")
-        temporary.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-        os.replace(temporary, paths.manifest)
+            index.replace_source(source_id, hierarchy.chunks, hierarchy.parents)
+        self._write_manifest(library_id)
         self._set_job(job_id, "running", 0.9)
 
     def list_sources(self, library_id: str) -> list[SourceRecord]:
@@ -291,6 +381,66 @@ class LoreDockService:
                 (library_id,),
             ).fetchall()
         return [self._source(row) for row in rows]
+
+    def list_sources_page(
+        self,
+        library_id: str,
+        *,
+        limit: int,
+        filter_text: str = "",
+        sort: str = "updated-desc",
+        after_value: str | int | None = None,
+        after_id: str | None = None,
+    ) -> tuple[list[SourceRecord], bool]:
+        """Return a stable keyset page and whether another page is available."""
+
+        self.get_library(library_id)
+        clauses = ["library_id=?"]
+        parameters: list[object] = [library_id]
+        normalized_filter = filter_text.strip().casefold()
+        if normalized_filter:
+            escaped = (
+                normalized_filter.replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_")
+            )
+            clauses.append(
+                "(lower(name) LIKE ? ESCAPE '\\' OR lower(media_type) LIKE ? ESCAPE '\\' "
+                "OR lower(status) LIKE ? ESCAPE '\\')"
+            )
+            pattern = f"%{escaped}%"
+            parameters.extend([pattern, pattern, pattern])
+
+        order_by: str
+        if sort == "updated-desc":
+            order_by = "updated_at DESC, id ASC"
+            if after_value is not None and after_id is not None:
+                clauses.append("(updated_at < ? OR (updated_at = ? AND id > ?))")
+                parameters.extend([after_value, after_value, after_id])
+        elif sort == "name-asc":
+            order_by = "name COLLATE NOCASE ASC, id ASC"
+            if after_value is not None and after_id is not None:
+                clauses.append(
+                    "(name COLLATE NOCASE > ? OR (name COLLATE NOCASE = ? AND id > ?))"
+                )
+                parameters.extend([after_value, after_value, after_id])
+        elif sort == "size-desc":
+            order_by = "size_bytes DESC, id ASC"
+            if after_value is not None and after_id is not None:
+                clauses.append("(size_bytes < ? OR (size_bytes = ? AND id > ?))")
+                parameters.extend([after_value, after_value, after_id])
+        else:
+            raise AppError("invalid_source_sort", "The requested source sort is invalid.")
+
+        parameters.append(limit + 1)
+        statement = (
+            f"SELECT * FROM sources WHERE {' AND '.join(clauses)} "
+            f"ORDER BY {order_by} LIMIT ?"
+        )
+        with self._lock:
+            rows = self.database.connection.execute(statement, parameters).fetchall()
+        has_more = len(rows) > limit
+        return [self._source(row) for row in rows[:limit]], has_more
 
     def get_source(self, source_id: str) -> SourceRecord:
         with self._lock:
@@ -321,6 +471,7 @@ class LoreDockService:
         source = self.get_source(source_id)
         paths = self.layout.library(source.library_id)
         with self._lock:
+            self._ensure_index_contract(source.library_id)
             if paths.index.exists():
                 with HybridSearchIndex(paths.index, self.provider) as index:
                     index.delete_source(source_id)
@@ -341,6 +492,8 @@ class LoreDockService:
         index_path = self.layout.library(library_id).index
         if not index_path.exists():
             return []
+        with self._lock:
+            self._ensure_index_contract(library_id)
         with self._lock, HybridSearchIndex(index_path, self.provider) as index:
             return index.search(normalized, limit=limit, lexical_only=lexical_only)
 

@@ -1,5 +1,9 @@
 from loredock.ingestion.parsers import ParsedDocument
-from loredock.retrieval.chunking import ChunkingConfig, chunk_document
+from loredock.retrieval.chunking import (
+    ChunkingConfig,
+    chunk_document,
+    chunk_document_hierarchy,
+)
 
 
 def test_chunks_preserve_offsets_and_heading_path() -> None:
@@ -24,3 +28,21 @@ def test_chunk_ids_are_deterministic() -> None:
     second = chunk_document(document, config)
 
     assert [chunk.id for chunk in first] == [chunk.id for chunk in second]
+
+
+def test_hierarchy_links_children_to_stable_sections() -> None:
+    text = "# Alpha\n\n" + "alpha detail " * 12 + "\n\n# Beta\n\n" + "beta detail " * 12
+    document = ParsedDocument("source", "test", text)
+    config = ChunkingConfig(target_tokens=6, max_tokens=8, overlap_tokens=1)
+
+    first = chunk_document_hierarchy(document, config)
+    second = chunk_document_hierarchy(document, config)
+
+    assert len(first.parents) == 2
+    assert [parent.id for parent in first.parents] == [parent.id for parent in second.parents]
+    assert all(chunk.parent_id is not None for chunk in first.chunks)
+    assert first.chunks[0].previous_id is None
+    assert first.chunks[-1].next_id is None
+    assert all(
+        chunk.next_id == first.chunks[index + 1].id for index, chunk in enumerate(first.chunks[:-1])
+    )

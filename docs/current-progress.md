@@ -2,7 +2,7 @@
 
 - 记录日期：2026-09-02
 - 当前分支：`main`
-- 当前里程碑：Phase 2.5 主路径完成，Phase 3 前六批完成，Windows 本地验收包可构建
+- 当前里程碑：Phase 2.5 主路径完成，Phase 3 前七批完成，Windows 本地验收包可构建
 
 ## 已完成
 
@@ -26,6 +26,7 @@
 - Tauri 自动启动 Core、动态回环端口、一次性 Bearer Token、API 版本握手和优雅关闭。
 - Windows PyInstaller 独立 Core 构建及 Tauri resource 装配。
 - Windows MSI 与 NSIS 本地验收包构建。
+- Core 异常退出后的三次有界自动恢复、状态诊断、诊断复制和人工重启。
 
 ## 已验证
 
@@ -34,12 +35,12 @@
 - Rust：`cargo check`、`cargo test` 和 Tauri Release 构建通过。
 - 独立 Core：动态端口、401 鉴权、健康检查、创建知识库、Markdown 导入/索引和优雅退出通过。
 - 发行目录桌面程序：确认从 Tauri resource 启动独立 `loredock-core.exe`，关闭后无残留进程。
+- 故障恢复：强制终止 ready Core 后以新 PID 和动态端口恢复；持续启动失败在三次恢复后停止，无无限重启或孤儿进程。
 - Windows 构建产物：MSI 和 NSIS 均成功生成；二进制产物位于 Git 忽略目录，不提交到仓库。
 
 ## 当前限制
 
 - Phase 2.5 评测仍需从 100 条扩展到 200～500 条，并完成 1 万真实 E5 分块性能验证。
-- Core 意外崩溃后还不会自动恢复，界面诊断信息也不够具体。
 - Windows 安装包尚未完成代码签名及干净虚拟机上的安装、升级、卸载和数据保留矩阵。
 - macOS、Linux 的独立 Core、桌面打包和生命周期尚未验证。
 - 模型管理、常规设置、深色主题和富文档版面预览尚未实现。
@@ -47,12 +48,9 @@
 
 ## 下一步执行顺序
 
-1. 为 Tauri Core 进程增加有界自动恢复：只处理异常退出，限制重启次数并使用退避，正常退出不重启。
-2. 增加桌面运行状态契约：`starting`、`ready`、`recovering`、`failed`，并向 Web UI 暴露稳定错误码和可理解诊断。
-3. 增加“重新启动 Core”人工恢复入口和诊断信息复制能力，同时避免输出一次性令牌、完整路径和私人内容。
-4. 添加 Rust 生命周期单元测试与 Windows 崩溃恢复烟雾测试，确认不会产生孤儿进程或无限重启。
-5. 在干净 Windows 虚拟机完成 MSI/NSIS 安装、升级、卸载与用户数据保留测试，再规划代码签名。
-6. 并行补齐 Phase 2.5 的 200～500 条评测集和 1 万真实 E5 分块性能报告。
-7. Phase 3 达到首次验收门槛后进入 Phase 4，实现只读 MCP 工具和 Codex/Cursor 接入向导。
+1. 在干净 Windows 虚拟机完成 MSI/NSIS 安装、升级、卸载与用户数据保留测试，再规划代码签名。
+2. 完善首次启动向导、模型管理、常规设置和明暗主题，完成 Phase 3 剩余产品化体验。
+3. 并行补齐 Phase 2.5 的 200～500 条评测集和 1 万真实 E5 分块性能报告。
+4. Phase 3 达到首次验收门槛后进入 Phase 4，实现只读 MCP 工具和 Codex/Cursor 接入向导。
 
 详细设计和验收条件以 [技术架构](technical-architecture.md)、[开发计划](development-plan.md)、[Phase 2.5 交付记录](phase-2.5-delivery.md)和 [Phase 3 交付记录](phase-3-delivery.md)为准。

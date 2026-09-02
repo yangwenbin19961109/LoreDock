@@ -16,8 +16,9 @@ import { Button } from '@loredock/ui'
 
 import { coreApi } from './api'
 import type { SourceListOptions } from './api'
+import { desktopCoreStatus, restartDesktopCore, type DesktopCoreStatus } from './runtime'
 
-type CoreState = 'checking' | 'ready' | 'offline'
+type CoreState = 'checking' | 'ready' | 'recovering' | 'failed' | 'offline'
 type DetailTab = 'preview' | 'details'
 type SourceSort = NonNullable<SourceListOptions['sort']>
 const SOURCE_PAGE_SIZE = 10
@@ -76,6 +77,7 @@ function HighlightedText({
 export function App() {
   const [coreState, setCoreState] = useState<CoreState>('checking')
   const [coreVersion, setCoreVersion] = useState<string>()
+  const [coreDiagnostic, setCoreDiagnostic] = useState<DesktopCoreStatus>()
   const [libraries, setLibraries] = useState<readonly Library[]>([])
   const [selectedId, setSelectedId] = useState<LibraryId>()
   const [sources, setSources] = useState<readonly Source[]>([])
@@ -103,6 +105,7 @@ export function App() {
   const [expandedContexts, setExpandedContexts] = useState<ReadonlySet<string>>(new Set())
   const [error, setError] = useState<string>()
   const fileInput = useRef<HTMLInputElement>(null)
+  const previousDesktopCoreState = useRef<string | undefined>(undefined)
 
   const selectedLibrary = libraries.find((library) => library.id === selectedId)
   const selectedSource = sources.find((source) => source.id === selectedSourceId)
@@ -114,12 +117,33 @@ export function App() {
 
   useEffect(() => {
     const controller = new AbortController()
-    void Promise.all([coreApi.health(controller.signal), coreApi.listLibraries(controller.signal)])
-      .then(([health, page]) => {
+    void desktopCoreStatus()
+      .then((status) => {
+        if (status && status.state !== 'ready') {
+          setCoreDiagnostic(status)
+          setCoreState(
+            status.state === 'recovering'
+              ? 'recovering'
+              : status.state === 'failed'
+                ? 'failed'
+                : 'checking'
+          )
+          previousDesktopCoreState.current = status.state
+          return undefined
+        }
+        return Promise.all([
+          coreApi.health(controller.signal),
+          coreApi.listLibraries(controller.signal)
+        ])
+      })
+      .then((result) => {
+        if (!result) return
+        const [health, page] = result
         setCoreVersion(health.version)
         setLibraries(page.items)
         setSelectedId(page.items[0]?.id)
         setCoreState('ready')
+        previousDesktopCoreState.current = 'ready'
       })
       .catch((reason: unknown) => {
         if (reason instanceof DOMException && reason.name === 'AbortError') return
@@ -127,6 +151,51 @@ export function App() {
         setError('无法连接 LoreDock Core，请确认核心服务已经启动。')
       })
     return () => controller.abort()
+  }, [])
+
+  useEffect(() => {
+    let disposed = false
+    async function synchronizeDesktopCore(): Promise<void> {
+      try {
+        const status = await desktopCoreStatus()
+        if (!status || disposed) return
+        const previous = previousDesktopCoreState.current
+        previousDesktopCoreState.current = status.state
+        setCoreDiagnostic(status)
+        if (status.state === 'ready') {
+          setCoreState('ready')
+          if (previous !== 'ready') {
+            const [health, page] = await Promise.all([coreApi.health(), coreApi.listLibraries()])
+            if (disposed) return
+            setCoreVersion(health.version)
+            setLibraries(page.items)
+            setSelectedId((current) =>
+              current && page.items.some((library) => library.id === current)
+                ? current
+                : page.items[0]?.id
+            )
+            setError(undefined)
+          }
+        } else if (status.state === 'recovering') {
+          setCoreState('recovering')
+        } else if (status.state === 'failed') {
+          setCoreState('failed')
+        } else {
+          setCoreState('checking')
+        }
+      } catch (reason) {
+        if (!disposed) {
+          setCoreState('failed')
+          setError(reason instanceof Error ? reason.message : '无法读取 Core 运行状态。')
+        }
+      }
+    }
+    void synchronizeDesktopCore()
+    const timer = window.setInterval(() => void synchronizeDesktopCore(), 1000)
+    return () => {
+      disposed = true
+      window.clearInterval(timer)
+    }
   }, [])
 
   useEffect(() => {
@@ -367,6 +436,32 @@ export function App() {
     })
   }
 
+  async function restartCore(): Promise<void> {
+    setCoreState('checking')
+    setError(undefined)
+    try {
+      await restartDesktopCore()
+    } catch (reason) {
+      setCoreState('failed')
+      setError(reason instanceof Error ? reason.message : 'Core 重启请求失败。')
+    }
+  }
+
+  async function copyCoreDiagnostic(): Promise<void> {
+    if (!coreDiagnostic) return
+    const diagnostic = [
+      `state=${coreDiagnostic.state}`,
+      `error_code=${coreDiagnostic.errorCode ?? 'none'}`,
+      `restart_count=${coreDiagnostic.restartCount}`,
+      `message=${coreDiagnostic.message ?? 'none'}`
+    ].join('\n')
+    try {
+      await navigator.clipboard.writeText(diagnostic)
+    } catch {
+      setError('无法复制诊断信息，请检查系统剪贴板权限。')
+    }
+  }
+
   return (
     <main className="app-shell">
       <aside className="sidebar">
@@ -426,6 +521,8 @@ export function App() {
           <span className="status-dot" aria-hidden="true" />
           {coreState === 'checking' && '正在连接 Core'}
           {coreState === 'ready' && `Core ${coreVersion ?? ''} 已连接`}
+          {coreState === 'recovering' && `Core 正在恢复（${coreDiagnostic?.restartCount ?? 0}/3）`}
+          {coreState === 'failed' && 'Core 启动失败'}
           {coreState === 'offline' && 'Core 未连接'}
         </div>
       </aside>
@@ -488,6 +585,25 @@ export function App() {
               ×
             </button>
           </div>
+        )}
+        {(coreState === 'recovering' || coreState === 'failed') && coreDiagnostic && (
+          <section className={`core-diagnostic core-diagnostic--${coreState}`} role="alert">
+            <div>
+              <strong>{coreState === 'recovering' ? '正在恢复 Core' : 'Core 无法启动'}</strong>
+              <p>{coreDiagnostic.message ?? '桌面核心服务暂时不可用。'}</p>
+              {coreDiagnostic.errorCode && <code>{coreDiagnostic.errorCode}</code>}
+            </div>
+            <div className="core-diagnostic-actions">
+              <button type="button" onClick={() => void copyCoreDiagnostic()}>
+                复制诊断
+              </button>
+              {coreState === 'failed' && (
+                <button type="button" className="primary" onClick={() => void restartCore()}>
+                  重新启动 Core
+                </button>
+              )}
+            </div>
+          </section>
         )}
 
         {!selectedLibrary ? (

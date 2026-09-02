@@ -24,6 +24,12 @@ Core requires the bearer token whenever `LOREDOCK_DESKTOP_TOKEN` is configured. 
 desktop-only shutdown endpoint asks Uvicorn to finish gracefully. Tauri waits up to five seconds
 and kills the owned child only as a last-resort fallback.
 
+Tauri supervises the owned Core process after startup. Unexpected exits enter `recovering` and use
+500 ms, 1 second, and 2 second delays before at most three automatic restarts. Exhausting that
+budget enters `failed` and waits for an explicit user restart, which resets the budget. Normal
+desktop shutdown never enters recovery. The WebView receives a redacted status contract separately
+from the secret-bearing connection contract.
+
 ## Alternatives considered
 
 - A fixed loopback port is simpler but conflicts with parallel instances and other local software.
@@ -36,6 +42,7 @@ and kills the owned child only as a last-resort fallback.
 ## Consequences
 
 - The token exists only for the lifetime of one desktop process and is never persisted.
+- Recovery is bounded for the desktop process lifetime, preventing an infinite crash loop.
 - Desktop WebViews require a narrowly scoped loopback CSP and Core CORS policy.
 - Development locates the repository Python virtual environment; releases must package a
   platform-specific `core/loredock-core` executable as a Tauri resource.
@@ -48,4 +55,6 @@ and kills the owned child only as a last-resort fallback.
 - Test the authenticated version and graceful-shutdown paths.
 - Launch Tauri, verify the Core listener uses a dynamic loopback port, close the window, and verify
   both owned processes exit.
+- Terminate a ready Core, verify a new process and port become ready, then verify repeated startup
+  failures stop after the third automatic restart and can only resume through explicit recovery.
 - Repeat lifecycle smoke tests on macOS and Linux after their packaged sidecars exist.

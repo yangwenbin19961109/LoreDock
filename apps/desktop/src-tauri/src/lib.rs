@@ -7,7 +7,10 @@ use std::{
     net::{TcpListener, TcpStream},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
-    sync::Mutex,
+    sync::{
+        Arc, Mutex,
+        mpsc::{self, Receiver, RecvTimeoutError, Sender},
+    },
     thread,
     time::{Duration, Instant},
 };
@@ -16,6 +19,7 @@ use uuid::Uuid;
 
 const CORE_START_TIMEOUT: Duration = Duration::from_secs(15);
 const CORE_STOP_TIMEOUT: Duration = Duration::from_secs(5);
+const MAX_AUTOMATIC_RESTARTS: u8 = 3;
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -30,14 +34,76 @@ struct VersionResponse {
     api_version: String,
 }
 
+#[derive(Clone, Copy, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+enum CorePhase {
+    Starting,
+    Ready,
+    Recovering,
+    Failed,
+    Stopped,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CoreStatus {
+    state: CorePhase,
+    error_code: Option<String>,
+    message: Option<String>,
+    restart_count: u8,
+}
+
+struct RuntimeSnapshot {
+    status: CoreStatus,
+    connection: Option<CoreConnection>,
+}
+
+enum SupervisorCommand {
+    Restart,
+    Shutdown,
+}
+
 struct CoreState {
-    connection: Result<CoreConnection, String>,
-    child: Mutex<Option<Child>>,
+    snapshot: Arc<Mutex<RuntimeSnapshot>>,
+    commands: Sender<SupervisorCommand>,
+    supervisor: Mutex<Option<thread::JoinHandle<()>>>,
 }
 
 #[tauri::command]
 fn core_connection(state: State<'_, CoreState>) -> Result<CoreConnection, String> {
-    state.connection.clone()
+    let snapshot = state
+        .snapshot
+        .lock()
+        .map_err(|_| "无法读取 Core 运行状态。".to_string())?;
+    if snapshot.status.state == CorePhase::Ready {
+        snapshot
+            .connection
+            .clone()
+            .ok_or_else(|| "Core 连接信息尚未就绪。".to_string())
+    } else {
+        Err(snapshot
+            .status
+            .message
+            .clone()
+            .unwrap_or_else(|| "Core 尚未就绪。".to_string()))
+    }
+}
+
+#[tauri::command]
+fn core_status(state: State<'_, CoreState>) -> Result<CoreStatus, String> {
+    state
+        .snapshot
+        .lock()
+        .map(|snapshot| snapshot.status.clone())
+        .map_err(|_| "无法读取 Core 运行状态。".to_string())
+}
+
+#[tauri::command]
+fn restart_core(state: State<'_, CoreState>) -> Result<(), String> {
+    state
+        .commands
+        .send(SupervisorCommand::Restart)
+        .map_err(|_| "Core 监督器已经停止。".to_string())
 }
 
 fn reserve_loopback_port() -> Result<u16, String> {
@@ -157,14 +223,26 @@ fn start_core(resource_dir: &Path, data_dir: &Path) -> Result<(CoreConnection, C
     }
 }
 
-fn stop_core(state: &CoreState) {
-    let Ok(mut guard) = state.child.lock() else {
-        return;
-    };
-    let Some(mut child) = guard.take() else {
-        return;
-    };
-    if let Ok(connection) = &state.connection {
+fn update_snapshot(
+    snapshot: &Arc<Mutex<RuntimeSnapshot>>,
+    state: CorePhase,
+    connection: Option<CoreConnection>,
+    error: Option<(&str, String)>,
+    restart_count: u8,
+) {
+    if let Ok(mut current) = snapshot.lock() {
+        current.status = CoreStatus {
+            state,
+            error_code: error.as_ref().map(|(code, _)| (*code).to_string()),
+            message: error.map(|(_, message)| message),
+            restart_count,
+        };
+        current.connection = connection;
+    }
+}
+
+fn stop_child(child: &mut Child, connection: &CoreConnection) {
+    {
         let port = connection
             .base_url
             .rsplit_once(':')
@@ -185,9 +263,211 @@ fn stop_core(state: &CoreState) {
     let _ = child.wait();
 }
 
+fn wait_for_command(
+    receiver: &Receiver<SupervisorCommand>,
+    delay: Duration,
+) -> Option<SupervisorCommand> {
+    match receiver.recv_timeout(delay) {
+        Ok(command) => Some(command),
+        Err(RecvTimeoutError::Timeout) => None,
+        Err(RecvTimeoutError::Disconnected) => Some(SupervisorCommand::Shutdown),
+    }
+}
+
+fn recovery_delay(restart_count: u8) -> Option<Duration> {
+    if restart_count == 0 || restart_count > MAX_AUTOMATIC_RESTARTS {
+        return None;
+    }
+    Some(Duration::from_millis(500 * (1_u64 << (restart_count - 1))))
+}
+
+fn supervise_core(
+    resource_dir: PathBuf,
+    data_dir: PathBuf,
+    snapshot: Arc<Mutex<RuntimeSnapshot>>,
+    receiver: Receiver<SupervisorCommand>,
+) {
+    let mut restart_count = 0_u8;
+    let mut phase = CorePhase::Starting;
+    loop {
+        update_snapshot(&snapshot, phase, None, None, restart_count);
+        let started = start_core(&resource_dir, &data_dir);
+        let (connection, mut child) = match started {
+            Ok(runtime) => runtime,
+            Err(message) => {
+                if restart_count >= MAX_AUTOMATIC_RESTARTS {
+                    update_snapshot(
+                        &snapshot,
+                        CorePhase::Failed,
+                        None,
+                        Some(("core_start_failed", message)),
+                        restart_count,
+                    );
+                    loop {
+                        match receiver.recv() {
+                            Ok(SupervisorCommand::Restart) => {
+                                restart_count = 0;
+                                phase = CorePhase::Starting;
+                                break;
+                            }
+                            Ok(SupervisorCommand::Shutdown) | Err(_) => {
+                                update_snapshot(
+                                    &snapshot,
+                                    CorePhase::Stopped,
+                                    None,
+                                    None,
+                                    restart_count,
+                                );
+                                return;
+                            }
+                        }
+                    }
+                    continue;
+                }
+                restart_count += 1;
+                phase = CorePhase::Recovering;
+                update_snapshot(
+                    &snapshot,
+                    phase,
+                    None,
+                    Some(("core_start_failed", message)),
+                    restart_count,
+                );
+                let delay = recovery_delay(restart_count).unwrap_or_default();
+                match wait_for_command(&receiver, delay) {
+                    Some(SupervisorCommand::Shutdown) => {
+                        update_snapshot(&snapshot, CorePhase::Stopped, None, None, restart_count);
+                        return;
+                    }
+                    Some(SupervisorCommand::Restart) => {
+                        restart_count = 0;
+                        phase = CorePhase::Starting;
+                    }
+                    None => {}
+                }
+                continue;
+            }
+        };
+
+        update_snapshot(
+            &snapshot,
+            CorePhase::Ready,
+            Some(connection.clone()),
+            None,
+            restart_count,
+        );
+        loop {
+            match wait_for_command(&receiver, Duration::from_millis(250)) {
+                Some(SupervisorCommand::Shutdown) => {
+                    stop_child(&mut child, &connection);
+                    update_snapshot(&snapshot, CorePhase::Stopped, None, None, restart_count);
+                    return;
+                }
+                Some(SupervisorCommand::Restart) => {
+                    stop_child(&mut child, &connection);
+                    restart_count = 0;
+                    phase = CorePhase::Starting;
+                    break;
+                }
+                None => match child.try_wait() {
+                    Ok(Some(status)) => {
+                        restart_count += 1;
+                        if restart_count > MAX_AUTOMATIC_RESTARTS {
+                            update_snapshot(
+                                &snapshot,
+                                CorePhase::Failed,
+                                None,
+                                Some((
+                                    "core_restart_exhausted",
+                                    format!("Core 反复异常退出，最后状态为 {status}。"),
+                                )),
+                                MAX_AUTOMATIC_RESTARTS,
+                            );
+                            restart_count = MAX_AUTOMATIC_RESTARTS;
+                            phase = CorePhase::Failed;
+                        } else {
+                            update_snapshot(
+                                &snapshot,
+                                CorePhase::Recovering,
+                                None,
+                                Some((
+                                    "core_exited_unexpectedly",
+                                    format!("Core 意外退出（{status}），正在恢复。"),
+                                )),
+                                restart_count,
+                            );
+                            phase = CorePhase::Recovering;
+                            let delay = recovery_delay(restart_count).unwrap_or_default();
+                            match wait_for_command(&receiver, delay) {
+                                Some(SupervisorCommand::Shutdown) => {
+                                    update_snapshot(
+                                        &snapshot,
+                                        CorePhase::Stopped,
+                                        None,
+                                        None,
+                                        restart_count,
+                                    );
+                                    return;
+                                }
+                                Some(SupervisorCommand::Restart) => {
+                                    restart_count = 0;
+                                    phase = CorePhase::Starting;
+                                }
+                                None => {}
+                            }
+                        }
+                        break;
+                    }
+                    Ok(None) => {}
+                    Err(error) => {
+                        update_snapshot(
+                            &snapshot,
+                            CorePhase::Failed,
+                            None,
+                            Some(("core_process_check_failed", error.to_string())),
+                            restart_count,
+                        );
+                        phase = CorePhase::Failed;
+                        break;
+                    }
+                },
+            }
+        }
+
+        if phase == CorePhase::Failed {
+            loop {
+                match receiver.recv() {
+                    Ok(SupervisorCommand::Restart) => {
+                        restart_count = 0;
+                        phase = CorePhase::Starting;
+                        break;
+                    }
+                    Ok(SupervisorCommand::Shutdown) | Err(_) => {
+                        update_snapshot(&snapshot, CorePhase::Stopped, None, None, restart_count);
+                        return;
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn stop_core(state: &CoreState) {
+    let _ = state.commands.send(SupervisorCommand::Shutdown);
+    if let Ok(mut supervisor) = state.supervisor.lock()
+        && let Some(handle) = supervisor.take()
+    {
+        let _ = handle.join();
+    }
+}
+
 pub fn run() {
     let app = tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![core_connection])
+        .invoke_handler(tauri::generate_handler![
+            core_connection,
+            core_status,
+            restart_core
+        ])
         .on_window_event(|window, event| {
             if matches!(event, WindowEvent::CloseRequested { .. }) {
                 stop_core(&window.state::<CoreState>());
@@ -197,13 +477,26 @@ pub fn run() {
         .setup(|app| {
             let resource_dir = app.path().resource_dir()?;
             let data_dir = app.path().app_data_dir()?;
-            let (connection, child) = match start_core(&resource_dir, &data_dir) {
-                Ok((connection, child)) => (Ok(connection), Some(child)),
-                Err(error) => (Err(error), None),
-            };
+            let snapshot = Arc::new(Mutex::new(RuntimeSnapshot {
+                status: CoreStatus {
+                    state: CorePhase::Starting,
+                    error_code: None,
+                    message: None,
+                    restart_count: 0,
+                },
+                connection: None,
+            }));
+            let (sender, receiver) = mpsc::channel();
+            let supervisor_snapshot = Arc::clone(&snapshot);
+            let supervisor = thread::Builder::new()
+                .name("loredock-core-supervisor".into())
+                .spawn(move || {
+                    supervise_core(resource_dir, data_dir, supervisor_snapshot, receiver);
+                })?;
             app.manage(CoreState {
-                connection,
-                child: Mutex::new(child),
+                snapshot,
+                commands: sender,
+                supervisor: Mutex::new(Some(supervisor)),
             });
             Ok(())
         })
@@ -219,13 +512,56 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::reserve_loopback_port;
+    use super::{
+        CoreConnection, CorePhase, CoreStatus, RuntimeSnapshot, recovery_delay,
+        reserve_loopback_port, update_snapshot,
+    };
     use std::net::TcpListener;
+    use std::sync::{Arc, Mutex};
+    use std::time::Duration;
 
     #[test]
     fn reserves_an_available_loopback_port() {
         let port = reserve_loopback_port().expect("port should be available");
         let listener = TcpListener::bind(("127.0.0.1", port));
         assert!(listener.is_ok());
+    }
+
+    #[test]
+    fn recovery_policy_is_bounded_and_uses_exponential_backoff() {
+        assert_eq!(recovery_delay(0), None);
+        assert_eq!(recovery_delay(1), Some(Duration::from_millis(500)));
+        assert_eq!(recovery_delay(2), Some(Duration::from_secs(1)));
+        assert_eq!(recovery_delay(3), Some(Duration::from_secs(2)));
+        assert_eq!(recovery_delay(4), None);
+    }
+
+    #[test]
+    fn failure_status_clears_secret_connection_details() {
+        let snapshot = Arc::new(Mutex::new(RuntimeSnapshot {
+            status: CoreStatus {
+                state: CorePhase::Ready,
+                error_code: None,
+                message: None,
+                restart_count: 0,
+            },
+            connection: Some(CoreConnection {
+                base_url: "http://127.0.0.1:12345".into(),
+                token: "secret-token".into(),
+                api_version: "v1".into(),
+            }),
+        }));
+        update_snapshot(
+            &snapshot,
+            CorePhase::Failed,
+            None,
+            Some(("core_restart_exhausted", "Core failed".into())),
+            3,
+        );
+        let snapshot = snapshot.lock().expect("snapshot should be readable");
+        assert!(snapshot.connection.is_none());
+        let serialized = serde_json::to_string(&snapshot.status).expect("status should serialize");
+        assert!(!serialized.contains("secret-token"));
+        assert!(serialized.contains("core_restart_exhausted"));
     }
 }

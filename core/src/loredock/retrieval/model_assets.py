@@ -3,12 +3,19 @@
 import hashlib
 import json
 import os
+import shutil
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from urllib.request import Request, urlopen
 
 from loredock.retrieval.embeddings import E5OnnxEmbeddingProvider
+
+DownloadProgress = Callable[[int, int, str], None]
+
+
+class ModelDownloadCancelled(Exception):
+    """Raised at a safe block boundary when a model download is canceled."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,6 +42,25 @@ E5_ASSETS = (
         17_082_730,
     ),
 )
+MODEL_INSTALL_RESERVE_BYTES = 256 * 1024 * 1024
+
+
+def required_e5_install_bytes() -> int:
+    """Return a conservative free-space requirement for verified atomic downloads."""
+
+    return sum(asset.size_bytes for asset in E5_ASSETS) + MODEL_INSTALL_RESERVE_BYTES
+
+
+def ensure_e5_install_space(directory: Path) -> int:
+    directory.parent.mkdir(parents=True, exist_ok=True)
+    free_bytes = shutil.disk_usage(directory.parent).free
+    required_bytes = required_e5_install_bytes()
+    if free_bytes < required_bytes:
+        raise OSError(
+            f"Insufficient disk space for model installation: {free_bytes} available, "
+            f"{required_bytes} required"
+        )
+    return free_bytes
 
 
 def sha256_file(path: Path) -> str:
@@ -54,8 +80,16 @@ def validate_e5_package(directory: Path) -> None:
             raise ValueError(f"Checksum mismatch for model asset: {asset.filename}")
 
 
-def install_e5_package(directory: Path, *, progress: Callable[[str], None] | None = None) -> Path:
+def install_e5_package(
+    directory: Path,
+    *,
+    progress: DownloadProgress | None = None,
+    should_cancel: Callable[[], bool] | None = None,
+) -> Path:
+    ensure_e5_install_space(directory)
     directory.mkdir(parents=True, exist_ok=True)
+    completed_bytes = 0
+    total_bytes = sum(asset.size_bytes for asset in E5_ASSETS)
     for asset in E5_ASSETS:
         destination = directory / asset.filename
         if (
@@ -63,29 +97,48 @@ def install_e5_package(directory: Path, *, progress: Callable[[str], None] | Non
             and destination.stat().st_size == asset.size_bytes
             and sha256_file(destination) == asset.sha256
         ):
+            completed_bytes += asset.size_bytes
             if progress is not None:
-                progress(f"Verified {asset.filename}")
+                progress(completed_bytes, total_bytes, asset.filename)
             continue
         temporary = destination.with_suffix(destination.suffix + ".part")
-        temporary.unlink(missing_ok=True)
+        offset = temporary.stat().st_size if temporary.exists() else 0
+        if offset > asset.size_bytes:
+            temporary.unlink()
+            offset = 0
         url = (
             f"https://huggingface.co/{E5_MODEL_ID}/resolve/{E5_REVISION}/"
             f"{asset.repository_path}?download=true"
         )
-        if progress is not None:
-            progress(f"Downloading {asset.filename} ({asset.size_bytes} bytes)")
-        request = Request(url, headers={"User-Agent": "LoreDock/0.1 model-installer"})
+        headers = {"User-Agent": "LoreDock/0.1 model-installer"}
+        if offset:
+            headers["Range"] = f"bytes={offset}-"
+        request = Request(url, headers=headers)
         try:
-            with urlopen(request, timeout=60) as response, temporary.open("wb") as output:
-                while block := response.read(1024 * 1024):
-                    output.write(block)
+            with urlopen(request, timeout=15) as response:
+                resumed = offset > 0 and getattr(response, "status", None) == 206
+                if not resumed:
+                    offset = 0
+                with temporary.open("ab" if resumed else "wb") as output:
+                    downloaded = offset
+                    if progress is not None:
+                        progress(completed_bytes + downloaded, total_bytes, asset.filename)
+                    while block := response.read(1024 * 1024):
+                        if should_cancel is not None and should_cancel():
+                            raise ModelDownloadCancelled()
+                        output.write(block)
+                        downloaded += len(block)
+                        if progress is not None:
+                            progress(completed_bytes + downloaded, total_bytes, asset.filename)
             if temporary.stat().st_size != asset.size_bytes:
                 raise ValueError(f"Unexpected size for model asset: {asset.filename}")
             if sha256_file(temporary) != asset.sha256:
+                temporary.unlink(missing_ok=True)
                 raise ValueError(f"Checksum mismatch for model asset: {asset.filename}")
             os.replace(temporary, destination)
-        finally:
-            temporary.unlink(missing_ok=True)
+            completed_bytes += asset.size_bytes
+        except ModelDownloadCancelled:
+            raise
     manifest = {
         "schema_version": 1,
         "model_id": E5_MODEL_ID,

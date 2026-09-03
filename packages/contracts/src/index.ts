@@ -16,6 +16,47 @@ export interface VersionResponse {
   readonly api_version: ApiVersion
 }
 
+export type ThemePreference = 'system' | 'light' | 'dark'
+export type DefaultSearchMode = 'hybrid' | 'lexical'
+
+export interface AppSettings {
+  readonly onboarding_completed: boolean
+  readonly theme: ThemePreference
+  readonly default_search_mode: DefaultSearchMode
+  readonly updated_at: string
+}
+
+export interface AppSettingsUpdate {
+  readonly onboarding_completed: boolean
+  readonly theme: ThemePreference
+  readonly default_search_mode: DefaultSearchMode
+}
+
+export interface ModelStatus {
+  readonly model_id: string
+  readonly display_name: string
+  readonly state: 'missing' | 'ready' | 'corrupt'
+  readonly active: boolean
+  readonly restart_required: boolean
+  readonly download_size_bytes: number
+  readonly required_space_bytes: number
+  readonly free_space_bytes: number
+  readonly error: string | null
+}
+
+export interface ModelJob {
+  readonly id: string
+  readonly model_id: string
+  readonly status: 'pending' | 'running' | 'succeeded' | 'failed' | 'canceled'
+  readonly attempts: number
+  readonly bytes_downloaded: number
+  readonly bytes_total: number
+  readonly current_file: string | null
+  readonly error: string | null
+  readonly created_at: string
+  readonly updated_at: string
+}
+
 export interface ErrorDetail {
   readonly code: string
   readonly message: string

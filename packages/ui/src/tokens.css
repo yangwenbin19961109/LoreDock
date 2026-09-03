@@ -45,6 +45,24 @@
   --ld-color-danger: #f87171;
 }
 
+@media (prefers-color-scheme: dark) {
+  [data-theme='system'] {
+    color-scheme: dark;
+    --ld-color-background: #0b1020;
+    --ld-color-surface: #111827;
+    --ld-color-surface-muted: #172033;
+    --ld-color-primary: #3b82f6;
+    --ld-color-primary-hover: #60a5fa;
+    --ld-color-primary-soft: #172554;
+    --ld-color-text: #e5e7eb;
+    --ld-color-text-muted: #94a3b8;
+    --ld-color-border: #263247;
+    --ld-color-success: #22c55e;
+    --ld-color-warning: #f59e0b;
+    --ld-color-danger: #f87171;
+  }
+}
+
 .ld-button {
   min-height: 36px;
   padding: 0 var(--ld-space-4);

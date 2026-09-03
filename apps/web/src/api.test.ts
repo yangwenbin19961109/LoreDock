@@ -23,6 +23,77 @@ describe('LoreDock Core API client', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/libraries', { signal: undefined })
   })
 
+  it('persists application settings through Core', async () => {
+    const payload = {
+      onboarding_completed: true,
+      theme: 'dark' as const,
+      default_search_mode: 'hybrid' as const
+    }
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ...payload, updated_at: '2026-09-03T00:00:00Z' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await coreApi.updateSettings(payload)
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/settings',
+      expect.objectContaining({ method: 'PUT', body: JSON.stringify(payload) })
+    )
+  })
+
+  it('reads the managed model state', async () => {
+    const payload = {
+      model_id: 'intfloat/multilingual-e5-small',
+      display_name: '多语言快速模型',
+      state: 'missing',
+      active: false,
+      restart_required: false,
+      download_size_bytes: 1,
+      required_space_bytes: 2,
+      free_space_bytes: 3,
+      error: null
+    }
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(coreApi.getDefaultModel()).resolves.toEqual(payload)
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/models/default', { signal: undefined })
+  })
+
+  it('starts a persistent model install job', async () => {
+    const job = {
+      id: 'model-job',
+      model_id: 'intfloat/multilingual-e5-small',
+      status: 'pending',
+      attempts: 0,
+      bytes_downloaded: 0,
+      bytes_total: 100,
+      current_file: null,
+      error: null,
+      created_at: '2026-09-03T00:00:00Z',
+      updated_at: '2026-09-03T00:00:00Z'
+    }
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(job), {
+        status: 202,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(coreApi.installDefaultModel()).resolves.toEqual(job)
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/models/default/install', { method: 'POST' })
+  })
+
   it('surfaces the Core error message', async () => {
     vi.stubGlobal(
       'fetch',

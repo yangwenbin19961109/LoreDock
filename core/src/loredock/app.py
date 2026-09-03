@@ -15,7 +15,7 @@ from loredock.api.routes import router
 from loredock.application import LoreDockService
 from loredock.application.errors import AppError
 from loredock.config import Settings
-from loredock.retrieval.model_assets import load_e5_provider
+from loredock.retrieval.model_assets import load_e5_provider, validate_e5_package
 from loredock.version import __version__
 
 
@@ -26,12 +26,22 @@ def create_app(*, data_dir: Path | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncGenerator[None]:
-        provider = (
-            load_e5_provider(settings.model_dir.resolve())
+        data_root = settings.resolved_data_dir()
+        model_dir = (
+            settings.model_dir.resolve()
             if settings.model_dir is not None
-            else None
+            else data_root / "models" / "multilingual-e5-small"
         )
-        application.state.service = LoreDockService(settings.resolved_data_dir(), provider=provider)
+        provider = None
+        if settings.model_dir is not None:
+            provider = load_e5_provider(model_dir)
+        elif model_dir.exists():
+            try:
+                validate_e5_package(model_dir)
+                provider = load_e5_provider(model_dir)
+            except ValueError:
+                provider = None
+        application.state.service = LoreDockService(data_root, provider=provider)
         try:
             yield
         finally:
@@ -76,7 +86,7 @@ def create_app(*, data_dir: Path | None = None) -> FastAPI:
         app.add_middleware(
             CORSMiddleware,
             allow_origins=["http://tauri.localhost", "https://tauri.localhost"],
-            allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+            allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
             allow_headers=["Authorization", "Content-Type"],
         )
 

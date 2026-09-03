@@ -1,4 +1,6 @@
 import {
+  type AppSettings,
+  type AppSettingsUpdate,
   coreEndpoint,
   type ErrorResponse,
   type HealthResponse,
@@ -7,6 +9,8 @@ import {
   type Library,
   type LibraryCreateRequest,
   type LibraryId,
+  type ModelStatus,
+  type ModelJob,
   type Page,
   type SearchRequest,
   type SearchResponse,
@@ -60,6 +64,42 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const coreApi = {
+  getSettings(signal?: AbortSignal): Promise<AppSettings> {
+    return request<AppSettings>('settings', { signal })
+  },
+
+  updateSettings(payload: AppSettingsUpdate): Promise<AppSettings> {
+    return request<AppSettings>('settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+  },
+
+  getDefaultModel(signal?: AbortSignal): Promise<ModelStatus> {
+    return request<ModelStatus>('models/default', { signal })
+  },
+
+  latestModelJob(signal?: AbortSignal): Promise<ModelJob | null> {
+    return request<ModelJob | null>('models/jobs/latest', { signal })
+  },
+
+  installDefaultModel(): Promise<ModelJob> {
+    return request<ModelJob>('models/default/install', { method: 'POST' })
+  },
+
+  getModelJob(jobId: string): Promise<ModelJob> {
+    return request<ModelJob>(`models/jobs/${jobId}`)
+  },
+
+  retryModelJob(jobId: string): Promise<ModelJob> {
+    return request<ModelJob>(`models/jobs/${jobId}/retry`, { method: 'POST' })
+  },
+
+  cancelModelJob(jobId: string): Promise<ModelJob> {
+    return request<ModelJob>(`models/jobs/${jobId}/cancel`, { method: 'POST' })
+  },
+
   health(signal?: AbortSignal): Promise<HealthResponse> {
     return request<HealthResponse>('health', { signal })
   },

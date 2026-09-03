@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 4
 
 
 def utc_timestamp() -> str:
@@ -83,6 +83,60 @@ class AppDatabase:
             with self.connection:
                 self.connection.execute("ALTER TABLE jobs ADD COLUMN lease_owner TEXT")
                 self.connection.execute("PRAGMA user_version=2")
+        if version < 3:
+            with self.connection:
+                self.connection.executescript(
+                    """
+                    CREATE TABLE IF NOT EXISTS app_settings (
+                        id INTEGER PRIMARY KEY CHECK (id = 1),
+                        onboarding_completed INTEGER NOT NULL DEFAULT 0,
+                        theme TEXT NOT NULL DEFAULT 'system'
+                            CHECK (theme IN ('system', 'light', 'dark')),
+                        default_search_mode TEXT NOT NULL DEFAULT 'hybrid'
+                            CHECK (default_search_mode IN ('hybrid', 'lexical')),
+                        updated_at TEXT NOT NULL
+                    );
+                    """
+                )
+                self.connection.execute(
+                    "INSERT OR IGNORE INTO app_settings(id, updated_at) VALUES (1, ?)",
+                    (utc_timestamp(),),
+                )
+                self.connection.execute("PRAGMA user_version=3")
+        if version < 4:
+            with self.connection:
+                self.connection.executescript(
+                    """
+                    CREATE TABLE IF NOT EXISTS model_jobs (
+                        id TEXT PRIMARY KEY,
+                        model_id TEXT NOT NULL,
+                        status TEXT NOT NULL CHECK (
+                            status IN ('pending', 'running', 'succeeded', 'failed', 'canceled')
+                        ),
+                        attempts INTEGER NOT NULL DEFAULT 0,
+                        bytes_downloaded INTEGER NOT NULL DEFAULT 0,
+                        bytes_total INTEGER NOT NULL,
+                        current_file TEXT,
+                        error TEXT,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    );
+                    CREATE INDEX IF NOT EXISTS model_jobs_status
+                    ON model_jobs(status, created_at);
+                    PRAGMA user_version=4;
+                    """
+                )
+
+    def recover_model_jobs(self) -> int:
+        with self.connection:
+            cursor = self.connection.execute(
+                """
+                UPDATE model_jobs SET status='pending', updated_at=?
+                WHERE status='running'
+                """,
+                (utc_timestamp(),),
+            )
+        return cursor.rowcount
 
     def recover_interrupted_jobs(self) -> int:
         now = utc_timestamp()

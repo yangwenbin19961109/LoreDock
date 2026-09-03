@@ -51,6 +51,22 @@ pnpm build:desktop:windows
 
 生成目录 `core/dist/`、`core/build/` 和 Tauri `target/` 均被 Git 忽略。安装包尚未签名，不能直接作为正式下载版本发布。
 
+### Windows 安装包验收
+
+安装、升级与卸载测试会修改系统安装状态，只能在没有个人资料的一次性干净 Windows 虚拟机中执行。将当前安装包以及需要验证的上一版本安装包复制到虚拟机，再运行：
+
+```powershell
+pnpm test:installer:windows `
+  -InstallerType msi `
+  -CurrentInstaller C:\acceptance\LoreDock_0.2.0_x64_en-US.msi `
+  -PreviousInstaller C:\acceptance\LoreDock_0.1.0_x64_en-US.msi `
+  -AcknowledgeDisposableMachine
+```
+
+NSIS 使用相同命令并把 `-InstallerType` 改为 `nsis`。不传 `-PreviousInstaller` 时只验证全新安装、启动、卸载、数据保留和孤儿进程；提供上一版本时还会验证静默覆盖升级。脚本要求测试机初始不存在 LoreDock 安装项和 `%APPDATA%\app.loredock.desktop`，不会主动清理已有用户数据。
+
+自动检查通过后仍需人工确认：开始菜单入口、窗口首次显示、创建并导入一份测试资料、搜索与引用预览、控制面板卸载项，以及卸载后的再次安装能否读回资料。MSI 与 NSIS 应分别使用还原后的干净快照执行，不能在同一系统状态中交叉覆盖。
+
 ### 本地真实 Embedding
 
 开发测试默认使用确定性哈希 Provider，保证安装和 CI 不依赖网络。需要验证真实语义检索时执行：

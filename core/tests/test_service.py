@@ -1,9 +1,14 @@
 import json
 import sqlite3
+import time
+from collections.abc import Callable
 from io import BytesIO
 from pathlib import Path
 
+import pytest
+
 from loredock.application import LoreDockService
+from loredock.application import service as service_module
 
 
 def test_library_source_search_read_delete_round_trip(tmp_path: Path) -> None:
@@ -74,4 +79,34 @@ def test_old_index_contract_is_rebuilt_without_changing_source(tmp_path: Path) -
         connection.close()
     assert version == ("3",)
     assert json.loads(paths.manifest.read_text(encoding="utf-8"))["schema_version"] == 3
+    service.close()
+
+
+def test_model_install_runs_as_persisted_background_job(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fake_install(
+        _directory: Path,
+        *,
+        progress: Callable[[int, int, str], None] | None = None,
+        should_cancel: Callable[[], bool] | None = None,
+    ) -> Path:
+        assert should_cancel is not None
+        assert should_cancel() is False
+        assert progress is not None
+        progress(64, 128, "model.onnx")
+        return _directory
+
+    monkeypatch.setattr(service_module, "install_e5_package", fake_install)
+    service = LoreDockService(tmp_path)
+    started = service.start_model_install()
+    deadline = time.monotonic() + 2
+    completed = service.get_model_job(started.id)
+    while completed.status in {"pending", "running"} and time.monotonic() < deadline:
+        time.sleep(0.01)
+        completed = service.get_model_job(started.id)
+
+    assert completed.status == "succeeded"
+    assert completed.bytes_downloaded == completed.bytes_total
+    assert completed.attempts == 1
     service.close()

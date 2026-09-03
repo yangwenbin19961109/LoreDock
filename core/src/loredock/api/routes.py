@@ -5,11 +5,15 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, File, Query, Request, Response, UploadFile, status
 
 from loredock.api.contracts import (
+    AppSettingsResponse,
+    AppSettingsUpdate,
     HealthResponse,
     JobResponse,
     LibraryCreate,
     LibraryResponse,
     LibraryUpdate,
+    ModelJobResponse,
+    ModelStatusResponse,
     Page,
     PageInfo,
     SearchRequest,
@@ -33,6 +37,52 @@ def get_service(request: Request) -> LoreDockService:
 
 
 Service = Annotated[LoreDockService, Depends(get_service)]
+
+
+@router.get("/settings", response_model=AppSettingsResponse, tags=["settings"])
+def get_settings(service: Service) -> AppSettingsResponse:
+    return AppSettingsResponse.model_validate(service.get_settings())
+
+
+@router.put("/settings", response_model=AppSettingsResponse, tags=["settings"])
+def update_settings(payload: AppSettingsUpdate, service: Service) -> AppSettingsResponse:
+    return AppSettingsResponse.model_validate(service.update_settings(**payload.model_dump()))
+
+
+@router.get("/models/default", response_model=ModelStatusResponse, tags=["models"])
+def get_default_model(service: Service) -> ModelStatusResponse:
+    return ModelStatusResponse.model_validate(service.get_default_model_status())
+
+
+@router.get("/models/jobs/latest", response_model=ModelJobResponse | None, tags=["models"])
+def latest_model_job(service: Service) -> ModelJobResponse | None:
+    job = service.latest_model_job()
+    return ModelJobResponse.model_validate(job) if job is not None else None
+
+
+@router.post(
+    "/models/default/install",
+    response_model=ModelJobResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    tags=["models"],
+)
+def install_default_model(service: Service) -> ModelJobResponse:
+    return ModelJobResponse.model_validate(service.start_model_install())
+
+
+@router.get("/models/jobs/{job_id}", response_model=ModelJobResponse, tags=["models"])
+def get_model_job(job_id: str, service: Service) -> ModelJobResponse:
+    return ModelJobResponse.model_validate(service.get_model_job(job_id))
+
+
+@router.post("/models/jobs/{job_id}/retry", response_model=ModelJobResponse, tags=["models"])
+def retry_model_job(job_id: str, service: Service) -> ModelJobResponse:
+    return ModelJobResponse.model_validate(service.retry_model_install(job_id))
+
+
+@router.post("/models/jobs/{job_id}/cancel", response_model=ModelJobResponse, tags=["models"])
+def cancel_model_job(job_id: str, service: Service) -> ModelJobResponse:
+    return ModelJobResponse.model_validate(service.cancel_model_install(job_id))
 
 
 @router.get("/health", response_model=HealthResponse, tags=["system"])

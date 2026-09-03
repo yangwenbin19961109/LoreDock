@@ -24,6 +24,44 @@ class VersionResponse(ApiModel):
     api_version: str
 
 
+class AppSettingsResponse(ApiModel):
+    onboarding_completed: bool
+    theme: Literal["system", "light", "dark"]
+    default_search_mode: Literal["hybrid", "lexical"]
+    updated_at: str
+
+
+class AppSettingsUpdate(ApiModel):
+    onboarding_completed: bool
+    theme: Literal["system", "light", "dark"]
+    default_search_mode: Literal["hybrid", "lexical"]
+
+
+class ModelStatusResponse(ApiModel):
+    model_id: str
+    display_name: str
+    state: Literal["missing", "ready", "corrupt"]
+    active: bool
+    restart_required: bool
+    download_size_bytes: int
+    required_space_bytes: int
+    free_space_bytes: int
+    error: str | None
+
+
+class ModelJobResponse(ApiModel):
+    id: str
+    model_id: str
+    status: Literal["pending", "running", "succeeded", "failed", "canceled"]
+    attempts: int
+    bytes_downloaded: int
+    bytes_total: int
+    current_file: str | None
+    error: str | None
+    created_at: str
+    updated_at: str
+
+
 class ErrorDetail(ApiModel):
     code: str
     message: str

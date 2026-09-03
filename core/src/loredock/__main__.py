@@ -15,9 +15,9 @@ def main() -> None:
     server = uvicorn.Server(
         uvicorn.Config(
             application,
-        host=settings.host,
-        port=settings.port,
-        log_level=settings.log_level,
+            host=settings.host,
+            port=settings.port,
+            log_level=settings.log_level,
         )
     )
     application.state.desktop_shutdown = lambda: setattr(server, "should_exit", True)

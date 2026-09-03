@@ -4,15 +4,24 @@ import hashlib
 import json
 import mimetypes
 import os
+import shutil
 import sqlite3
 from dataclasses import asdict
 from pathlib import Path
-from threading import RLock
+from threading import Event, RLock, Thread
 from typing import BinaryIO
 from uuid import uuid4
 
 from loredock.application.errors import AppError
-from loredock.application.records import JobRecord, LibraryRecord, SourceContent, SourceRecord
+from loredock.application.records import (
+    AppSettingsRecord,
+    JobRecord,
+    LibraryRecord,
+    ModelJobRecord,
+    ModelStatusRecord,
+    SourceContent,
+    SourceRecord,
+)
 from loredock.ingestion import parse_path
 from loredock.retrieval import (
     ChunkingConfig,
@@ -21,6 +30,14 @@ from loredock.retrieval import (
     HybridSearchIndex,
     SearchResult,
     chunk_document_hierarchy,
+)
+from loredock.retrieval.model_assets import (
+    E5_ASSETS,
+    E5_MODEL_ID,
+    ModelDownloadCancelled,
+    install_e5_package,
+    required_e5_install_bytes,
+    validate_e5_package,
 )
 from loredock.storage import AppDatabase, DataLayout
 from loredock.storage.database import utc_timestamp
@@ -38,6 +55,210 @@ class LoreDockService:
         self.provider = provider or HashingEmbeddingProvider()
         self.chunking = ChunkingConfig()
         self._lock = RLock()
+        self._model_stop = Event()
+        self._model_cancel = Event()
+        self._model_thread: Thread | None = None
+        self.database.recover_model_jobs()
+        pending = self.database.connection.execute(
+            "SELECT id FROM model_jobs WHERE status='pending' ORDER BY created_at DESC LIMIT 1"
+        ).fetchone()
+        if pending is not None:
+            self._start_model_worker(str(pending["id"]))
+
+    @property
+    def managed_model_dir(self) -> Path:
+        return self.layout.root / "models" / "multilingual-e5-small"
+
+    def get_default_model_status(self) -> ModelStatusRecord:
+        state = "missing"
+        error = None
+        if self.managed_model_dir.exists():
+            try:
+                validate_e5_package(self.managed_model_dir)
+                state = "ready"
+            except ValueError as reason:
+                state = "corrupt"
+                error = str(reason)
+        active = self.provider.identifier.startswith(E5_MODEL_ID)
+        return ModelStatusRecord(
+            model_id=E5_MODEL_ID,
+            display_name="多语言快速模型",
+            state=state,
+            active=active,
+            restart_required=state == "ready" and not active,
+            download_size_bytes=sum(asset.size_bytes for asset in E5_ASSETS),
+            required_space_bytes=required_e5_install_bytes(),
+            free_space_bytes=shutil.disk_usage(self.layout.root).free,
+            error=error,
+        )
+
+    @staticmethod
+    def _model_job(row: sqlite3.Row) -> ModelJobRecord:
+        return ModelJobRecord(
+            id=str(row["id"]),
+            model_id=str(row["model_id"]),
+            status=row["status"],
+            attempts=int(row["attempts"]),
+            bytes_downloaded=int(row["bytes_downloaded"]),
+            bytes_total=int(row["bytes_total"]),
+            current_file=str(row["current_file"]) if row["current_file"] else None,
+            error=str(row["error"]) if row["error"] else None,
+            created_at=str(row["created_at"]),
+            updated_at=str(row["updated_at"]),
+        )
+
+    def get_model_job(self, job_id: str) -> ModelJobRecord:
+        with self._lock:
+            row = self.database.connection.execute(
+                "SELECT * FROM model_jobs WHERE id=?", (job_id,)
+            ).fetchone()
+        if row is None:
+            raise AppError("model_job_not_found", "The model job does not exist.", status_code=404)
+        return self._model_job(row)
+
+    def latest_model_job(self) -> ModelJobRecord | None:
+        with self._lock:
+            row = self.database.connection.execute(
+                "SELECT * FROM model_jobs ORDER BY created_at DESC LIMIT 1"
+            ).fetchone()
+        return self._model_job(row) if row is not None else None
+
+    def start_model_install(self) -> ModelJobRecord:
+        existing = self.latest_model_job()
+        if existing is not None and existing.status in {"pending", "running"}:
+            return existing
+        job_id = str(uuid4())
+        now = utc_timestamp()
+        with self._lock, self.database.transaction() as connection:
+            connection.execute(
+                """
+                INSERT INTO model_jobs(
+                    id, model_id, status, bytes_total, created_at, updated_at
+                ) VALUES (?, ?, 'pending', ?, ?, ?)
+                """,
+                (job_id, E5_MODEL_ID, sum(asset.size_bytes for asset in E5_ASSETS), now, now),
+            )
+        self._start_model_worker(job_id)
+        return self.get_model_job(job_id)
+
+    def retry_model_install(self, job_id: str) -> ModelJobRecord:
+        job = self.get_model_job(job_id)
+        if job.status not in {"failed", "canceled"}:
+            raise AppError(
+                "model_job_not_retryable", "The model job cannot be retried.", status_code=409
+            )
+        with self._lock, self.database.transaction() as connection:
+            connection.execute(
+                "UPDATE model_jobs SET status='pending', error=NULL, updated_at=? WHERE id=?",
+                (utc_timestamp(), job_id),
+            )
+        self._start_model_worker(job_id)
+        return self.get_model_job(job_id)
+
+    def cancel_model_install(self, job_id: str) -> ModelJobRecord:
+        job = self.get_model_job(job_id)
+        if job.status not in {"pending", "running"}:
+            raise AppError(
+                "model_job_not_cancelable", "The model job cannot be canceled.", status_code=409
+            )
+        self._model_cancel.set()
+        if self._model_thread is not None:
+            self._model_thread.join(timeout=0.5)
+        return self.get_model_job(job_id)
+
+    def _start_model_worker(self, job_id: str) -> None:
+        if self._model_thread is not None and self._model_thread.is_alive():
+            return
+        self._model_cancel.clear()
+        self._model_thread = Thread(
+            target=self._run_model_install,
+            args=(job_id,),
+            name="loredock-model-installer",
+            daemon=True,
+        )
+        self._model_thread.start()
+
+    def _run_model_install(self, job_id: str) -> None:
+        with self._lock, self.database.transaction() as connection:
+            connection.execute(
+                """
+                UPDATE model_jobs SET status='running', attempts=attempts+1,
+                    error=NULL, updated_at=? WHERE id=? AND status='pending'
+                """,
+                (utc_timestamp(), job_id),
+            )
+
+        def update_progress(downloaded: int, total: int, filename: str) -> None:
+            with self._lock, self.database.transaction() as connection:
+                connection.execute(
+                    """
+                    UPDATE model_jobs SET bytes_downloaded=?, bytes_total=?, current_file=?,
+                        updated_at=? WHERE id=? AND status='running'
+                    """,
+                    (downloaded, total, filename, utc_timestamp(), job_id),
+                )
+
+        try:
+            install_e5_package(
+                self.managed_model_dir,
+                progress=update_progress,
+                should_cancel=lambda: self._model_cancel.is_set() or self._model_stop.is_set(),
+            )
+        except ModelDownloadCancelled:
+            status = "pending" if self._model_stop.is_set() else "canceled"
+            with self._lock, self.database.transaction() as connection:
+                connection.execute(
+                    "UPDATE model_jobs SET status=?, updated_at=? WHERE id=?",
+                    (status, utc_timestamp(), job_id),
+                )
+        except Exception as reason:
+            with self._lock, self.database.transaction() as connection:
+                connection.execute(
+                    "UPDATE model_jobs SET status='failed', error=?, updated_at=? WHERE id=?",
+                    (str(reason)[:1000], utc_timestamp(), job_id),
+                )
+        else:
+            with self._lock, self.database.transaction() as connection:
+                connection.execute(
+                    """
+                    UPDATE model_jobs SET status='succeeded', bytes_downloaded=bytes_total,
+                        current_file=NULL, updated_at=? WHERE id=?
+                    """,
+                    (utc_timestamp(), job_id),
+                )
+
+    def get_settings(self) -> AppSettingsRecord:
+        row = self.database.connection.execute("SELECT * FROM app_settings WHERE id=1").fetchone()
+        if row is None:
+            raise RuntimeError("app settings row is missing")
+        return AppSettingsRecord(
+            onboarding_completed=bool(row["onboarding_completed"]),
+            theme=row["theme"],
+            default_search_mode=row["default_search_mode"],
+            updated_at=str(row["updated_at"]),
+        )
+
+    def update_settings(
+        self,
+        *,
+        onboarding_completed: bool,
+        theme: str,
+        default_search_mode: str,
+    ) -> AppSettingsRecord:
+        if theme not in {"system", "light", "dark"}:
+            raise AppError("invalid_theme", "The requested theme is invalid.")
+        if default_search_mode not in {"hybrid", "lexical"}:
+            raise AppError("invalid_search_mode", "The requested search mode is invalid.")
+        with self._lock, self.database.transaction() as connection:
+            connection.execute(
+                """
+                UPDATE app_settings
+                SET onboarding_completed=?, theme=?, default_search_mode=?, updated_at=?
+                WHERE id=1
+                """,
+                (onboarding_completed, theme, default_search_mode, utc_timestamp()),
+            )
+        return self.get_settings()
 
     def _manifest_payload(self) -> dict[str, object]:
         return {
@@ -138,6 +359,11 @@ class LoreDockService:
             raise
 
     def close(self) -> None:
+        self._model_stop.set()
+        if self._model_thread is not None:
+            self._model_thread.join(timeout=2)
+        if self._model_thread is not None and self._model_thread.is_alive():
+            return
         self.database.close()
 
     @staticmethod
@@ -400,9 +626,7 @@ class LoreDockService:
         normalized_filter = filter_text.strip().casefold()
         if normalized_filter:
             escaped = (
-                normalized_filter.replace("\\", "\\\\")
-                .replace("%", "\\%")
-                .replace("_", "\\_")
+                normalized_filter.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
             )
             clauses.append(
                 "(lower(name) LIKE ? ESCAPE '\\' OR lower(media_type) LIKE ? ESCAPE '\\' "
@@ -420,9 +644,7 @@ class LoreDockService:
         elif sort == "name-asc":
             order_by = "name COLLATE NOCASE ASC, id ASC"
             if after_value is not None and after_id is not None:
-                clauses.append(
-                    "(name COLLATE NOCASE > ? OR (name COLLATE NOCASE = ? AND id > ?))"
-                )
+                clauses.append("(name COLLATE NOCASE > ? OR (name COLLATE NOCASE = ? AND id > ?))")
                 parameters.extend([after_value, after_value, after_id])
         elif sort == "size-desc":
             order_by = "size_bytes DESC, id ASC"
@@ -434,8 +656,7 @@ class LoreDockService:
 
         parameters.append(limit + 1)
         statement = (
-            f"SELECT * FROM sources WHERE {' AND '.join(clauses)} "
-            f"ORDER BY {order_by} LIMIT ?"
+            f"SELECT * FROM sources WHERE {' AND '.join(clauses)} ORDER BY {order_by} LIMIT ?"
         )
         with self._lock:
             rows = self.database.connection.execute(statement, parameters).fetchall()

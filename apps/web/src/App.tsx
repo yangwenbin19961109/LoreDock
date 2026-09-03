@@ -1,11 +1,14 @@
-import type { FormEvent, ReactNode } from 'react'
+import type { FormEvent } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import type {
+  AppSettings,
   CitationRange,
   Job,
   Library,
   LibraryId,
+  ModelStatus,
+  ModelJob,
   SearchResult,
   Source,
   SourceContentResponse,
@@ -16,6 +19,7 @@ import { Button } from '@loredock/ui'
 
 import { coreApi } from './api'
 import type { SourceListOptions } from './api'
+import { DocumentPreview } from './documentPreview'
 import { desktopCoreStatus, restartDesktopCore, type DesktopCoreStatus } from './runtime'
 
 type CoreState = 'checking' | 'ready' | 'recovering' | 'failed' | 'offline'
@@ -54,26 +58,6 @@ function sourceStatus(status: string): string {
   return labels[status] ?? status
 }
 
-function HighlightedText({
-  content,
-  range
-}: {
-  readonly content: SourceContentResponse
-  readonly range?: CitationRange
-}): ReactNode {
-  if (!range) return content.text
-  const start = Math.max(0, range.char_start - content.char_start)
-  const end = Math.min(content.text.length, range.char_end - content.char_start)
-  if (start >= end) return content.text
-  return (
-    <>
-      {content.text.slice(0, start)}
-      <mark>{content.text.slice(start, end)}</mark>
-      {content.text.slice(end)}
-    </>
-  )
-}
-
 export function App() {
   const [coreState, setCoreState] = useState<CoreState>('checking')
   const [coreVersion, setCoreVersion] = useState<string>()
@@ -93,6 +77,10 @@ export function App() {
   const [detailTab, setDetailTab] = useState<DetailTab>('preview')
   const [showCreate, setShowCreate] = useState(false)
   const [showRename, setShowRename] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
+  const [settings, setSettings] = useState<AppSettings>()
+  const [modelStatus, setModelStatus] = useState<ModelStatus>()
+  const [modelJob, setModelJob] = useState<ModelJob | null>(null)
   const [libraryName, setLibraryName] = useState('')
   const [renameName, setRenameName] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>()
@@ -110,6 +98,8 @@ export function App() {
   const selectedLibrary = libraries.find((library) => library.id === selectedId)
   const selectedSource = sources.find((source) => source.id === selectedSourceId)
   const sourcePage = sourceCursorHistory.length + 1
+  const activeModelJobId =
+    modelJob && ['pending', 'running'].includes(modelJob.status) ? modelJob.id : undefined
   const activeJobs = useMemo(
     () => Object.values(jobs).filter((job) => !['succeeded', 'failed'].includes(job.status)),
     [jobs]
@@ -133,15 +123,22 @@ export function App() {
         }
         return Promise.all([
           coreApi.health(controller.signal),
-          coreApi.listLibraries(controller.signal)
+          coreApi.listLibraries(controller.signal),
+          coreApi.getSettings(controller.signal),
+          coreApi.getDefaultModel(controller.signal),
+          coreApi.latestModelJob(controller.signal)
         ])
       })
       .then((result) => {
         if (!result) return
-        const [health, page] = result
+        const [health, page, loadedSettings, loadedModel, loadedModelJob] = result
         setCoreVersion(health.version)
         setLibraries(page.items)
         setSelectedId(page.items[0]?.id)
+        setSettings(loadedSettings)
+        setModelStatus(loadedModel)
+        setModelJob(loadedModelJob)
+        setLexicalOnly(loadedSettings.default_search_mode === 'lexical')
         setCoreState('ready')
         previousDesktopCoreState.current = 'ready'
       })
@@ -165,10 +162,20 @@ export function App() {
         if (status.state === 'ready') {
           setCoreState('ready')
           if (previous !== 'ready') {
-            const [health, page] = await Promise.all([coreApi.health(), coreApi.listLibraries()])
+            const [health, page, loadedSettings, loadedModel, loadedModelJob] = await Promise.all([
+              coreApi.health(),
+              coreApi.listLibraries(),
+              coreApi.getSettings(),
+              coreApi.getDefaultModel(),
+              coreApi.latestModelJob()
+            ])
             if (disposed) return
             setCoreVersion(health.version)
             setLibraries(page.items)
+            setSettings(loadedSettings)
+            setModelStatus(loadedModel)
+            setModelJob(loadedModelJob)
+            setLexicalOnly(loadedSettings.default_search_mode === 'lexical')
             setSelectedId((current) =>
               current && page.items.some((library) => library.id === current)
                 ? current
@@ -197,6 +204,35 @@ export function App() {
       window.clearInterval(timer)
     }
   }, [])
+
+  useEffect(() => {
+    const theme = settings?.theme ?? 'system'
+    document.documentElement.dataset.theme = theme
+    return () => {
+      delete document.documentElement.dataset.theme
+    }
+  }, [settings?.theme])
+
+  useEffect(() => {
+    if (!activeModelJobId) return
+    let disposed = false
+    const timer = window.setInterval(() => {
+      void coreApi
+        .getModelJob(activeModelJobId)
+        .then(async (job) => {
+          if (disposed) return
+          setModelJob(job)
+          if (job.status === 'succeeded') setModelStatus(await coreApi.getDefaultModel())
+        })
+        .catch((reason: unknown) => {
+          if (!disposed) setError(reason instanceof Error ? reason.message : '模型进度读取失败。')
+        })
+    }, 500)
+    return () => {
+      disposed = true
+      window.clearInterval(timer)
+    }
+  }, [activeModelJobId])
 
   useEffect(() => {
     if (!selectedId) return
@@ -462,6 +498,52 @@ export function App() {
     }
   }
 
+  async function saveSettings(next: {
+    readonly onboarding_completed: boolean
+    readonly theme: AppSettings['theme']
+    readonly default_search_mode: AppSettings['default_search_mode']
+  }): Promise<void> {
+    setBusy(true)
+    setError(undefined)
+    try {
+      const updated = await coreApi.updateSettings(next)
+      setSettings(updated)
+      setLexicalOnly(updated.default_search_mode === 'lexical')
+      setShowSettings(false)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '设置保存失败。')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function installModel(): Promise<void> {
+    setError(undefined)
+    try {
+      setModelJob(await coreApi.installDefaultModel())
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '模型安装失败。')
+    }
+  }
+
+  async function cancelModel(): Promise<void> {
+    if (!modelJob) return
+    try {
+      setModelJob(await coreApi.cancelModelJob(modelJob.id))
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '无法取消模型下载。')
+    }
+  }
+
+  async function retryModel(): Promise<void> {
+    if (!modelJob) return
+    try {
+      setModelJob(await coreApi.retryModelJob(modelJob.id))
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '无法重试模型下载。')
+    }
+  }
+
   return (
     <main className="app-shell">
       <aside className="sidebar">
@@ -482,7 +564,12 @@ export function App() {
           <button className="nav-item" type="button" disabled>
             <span>◎</span>Agent 连接
           </button>
-          <button className="nav-item" type="button" disabled>
+          <button
+            className="nav-item"
+            type="button"
+            onClick={() => setShowSettings(true)}
+            disabled={!settings}
+          >
             <span>⚙</span>设置
           </button>
         </nav>
@@ -890,9 +977,7 @@ export function App() {
                               此处显示从原文件安全提取的纯文本，原文件不会被修改。
                             </p>
                           )}
-                          <pre>
-                            <HighlightedText content={sourceContent} range={highlightRange} />
-                          </pre>
+                          <DocumentPreview content={sourceContent} range={highlightRange} />
                         </>
                       ) : (
                         <p>正在读取原文…</p>
@@ -940,6 +1025,151 @@ export function App() {
           </div>
         )}
       </section>
+
+      {settings && !settings.onboarding_completed && (
+        <div className="dialog-backdrop onboarding-backdrop" role="presentation">
+          <section className="dialog onboarding-dialog" aria-labelledby="onboarding-title">
+            <img className="onboarding-mark" src="/loredock-icon.png" alt="" />
+            <p className="eyebrow">欢迎来到 LoreDock</p>
+            <h2 id="onboarding-title">让资料真正为你所用</h2>
+            <p>资料只保存在你的设备上。创建知识库、导入文件后，就能立即搜索并查看精确来源。</p>
+            <div className="onboarding-features">
+              <span>本地优先</span>
+              <span>混合检索</span>
+              <span>精确引用</span>
+            </div>
+            <Button
+              onClick={() =>
+                void saveSettings({
+                  onboarding_completed: true,
+                  theme: settings.theme,
+                  default_search_mode: settings.default_search_mode
+                })
+              }
+              disabled={busy}
+            >
+              {busy ? '正在准备…' : '开始使用'}
+            </Button>
+          </section>
+        </div>
+      )}
+
+      {showSettings && settings && (
+        <div
+          className="dialog-backdrop"
+          role="presentation"
+          onMouseDown={() => setShowSettings(false)}
+        >
+          <form
+            className="dialog settings-dialog"
+            aria-labelledby="app-settings-title"
+            onSubmit={(event) => {
+              event.preventDefault()
+              const data = new FormData(event.currentTarget)
+              void saveSettings({
+                onboarding_completed: true,
+                theme: data.get('theme') as AppSettings['theme'],
+                default_search_mode: data.get(
+                  'default_search_mode'
+                ) as AppSettings['default_search_mode']
+              })
+            }}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <p className="eyebrow">应用偏好</p>
+            <h2 id="app-settings-title">设置</h2>
+            <label htmlFor="theme-preference">外观</label>
+            <select id="theme-preference" name="theme" defaultValue={settings.theme}>
+              <option value="system">跟随系统</option>
+              <option value="light">浅色</option>
+              <option value="dark">深色</option>
+            </select>
+            <label htmlFor="default-search-mode">默认搜索方式</label>
+            <select
+              id="default-search-mode"
+              name="default_search_mode"
+              defaultValue={settings.default_search_mode}
+            >
+              <option value="hybrid">混合检索（推荐）</option>
+              <option value="lexical">仅全文检索</option>
+            </select>
+            <p className="setting-note">混合检索不可用时，LoreDock 仍会保留全文检索能力。</p>
+            <section className="model-card" aria-label="本地模型">
+              <div>
+                <strong>{modelStatus?.display_name ?? '多语言快速模型'}</strong>
+                <p>
+                  {modelStatus?.active
+                    ? '正在使用 · 384 维本地语义检索'
+                    : modelStatus?.state === 'ready'
+                      ? '安装完成 · 重启 LoreDock 后启用'
+                      : modelStatus?.state === 'corrupt'
+                        ? '文件校验失败，可以重新安装修复'
+                        : '尚未安装 · 当前自动使用全文检索兼容模式'}
+                </p>
+              </div>
+              {!modelStatus?.active &&
+                modelStatus?.state !== 'ready' &&
+                (!modelJob || modelJob.status === 'succeeded') && (
+                  <Button type="button" variant="secondary" onClick={() => void installModel()}>
+                    {modelJob?.status === 'failed' || modelJob?.status === 'canceled'
+                      ? '继续下载'
+                      : modelStatus?.state === 'corrupt'
+                        ? '重新安装'
+                        : '安装模型'}
+                  </Button>
+                )}
+            </section>
+            {modelJob && ['pending', 'running'].includes(modelJob.status) && (
+              <section className="model-progress" aria-live="polite">
+                <div>
+                  <span>
+                    {modelJob.current_file ? `正在下载 ${modelJob.current_file}` : '正在准备下载'}
+                  </span>
+                  <strong>
+                    {modelJob.bytes_total
+                      ? `${Math.floor((modelJob.bytes_downloaded / modelJob.bytes_total) * 100)}%`
+                      : '0%'}
+                  </strong>
+                </div>
+                <progress value={modelJob.bytes_downloaded} max={modelJob.bytes_total || 1} />
+                <div>
+                  <small>
+                    {formatBytes(modelJob.bytes_downloaded)} / {formatBytes(modelJob.bytes_total)}
+                  </small>
+                  <button type="button" onClick={() => void cancelModel()}>
+                    取消
+                  </button>
+                </div>
+              </section>
+            )}
+            {modelJob && ['failed', 'canceled'].includes(modelJob.status) && (
+              <div className="model-job-message">
+                <span>
+                  {modelJob.status === 'canceled' ? '下载已暂停，可从已有进度继续。' : '下载失败。'}
+                </span>
+                <button type="button" onClick={() => void retryModel()}>
+                  重试
+                </button>
+              </div>
+            )}
+            {modelStatus && !modelStatus.active && modelStatus.state !== 'ready' && (
+              <p className="setting-note">
+                下载约 {formatBytes(modelStatus.download_size_bytes)}，磁盘至少需要{' '}
+                {formatBytes(modelStatus.required_space_bytes)} 可用空间。下载地址固定且文件会进行
+                SHA-256 校验。
+              </p>
+            )}
+            <div className="dialog-actions">
+              <Button type="button" variant="ghost" onClick={() => setShowSettings(false)}>
+                取消
+              </Button>
+              <Button type="submit" disabled={busy}>
+                {busy ? '正在保存…' : '保存设置'}
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {showCreate && (
         <div

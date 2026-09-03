@@ -303,23 +303,20 @@ fn supervise_core(
                         Some(("core_start_failed", message)),
                         restart_count,
                     );
-                    loop {
-                        match receiver.recv() {
-                            Ok(SupervisorCommand::Restart) => {
-                                restart_count = 0;
-                                phase = CorePhase::Starting;
-                                break;
-                            }
-                            Ok(SupervisorCommand::Shutdown) | Err(_) => {
-                                update_snapshot(
-                                    &snapshot,
-                                    CorePhase::Stopped,
-                                    None,
-                                    None,
-                                    restart_count,
-                                );
-                                return;
-                            }
+                    match receiver.recv() {
+                        Ok(SupervisorCommand::Restart) => {
+                            restart_count = 0;
+                            phase = CorePhase::Starting;
+                        }
+                        Ok(SupervisorCommand::Shutdown) | Err(_) => {
+                            update_snapshot(
+                                &snapshot,
+                                CorePhase::Stopped,
+                                None,
+                                None,
+                                restart_count,
+                            );
+                            return;
                         }
                     }
                     continue;
@@ -435,17 +432,14 @@ fn supervise_core(
         }
 
         if phase == CorePhase::Failed {
-            loop {
-                match receiver.recv() {
-                    Ok(SupervisorCommand::Restart) => {
-                        restart_count = 0;
-                        phase = CorePhase::Starting;
-                        break;
-                    }
-                    Ok(SupervisorCommand::Shutdown) | Err(_) => {
-                        update_snapshot(&snapshot, CorePhase::Stopped, None, None, restart_count);
-                        return;
-                    }
+            match receiver.recv() {
+                Ok(SupervisorCommand::Restart) => {
+                    restart_count = 0;
+                    phase = CorePhase::Starting;
+                }
+                Ok(SupervisorCommand::Shutdown) | Err(_) => {
+                    update_snapshot(&snapshot, CorePhase::Stopped, None, None, restart_count);
+                    return;
                 }
             }
         }

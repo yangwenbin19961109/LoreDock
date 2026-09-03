@@ -14,6 +14,7 @@
     "build:core:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-core-sidecar.ps1",
     "build:desktop:windows": "pnpm build:core:windows && pnpm --filter @loredock/desktop exec tauri build --config src-tauri/tauri.bundle.conf.json",
     "test:core:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-core-sidecar.ps1",
+    "test:installer:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-windows-installer.ps1",
     "dev": "pnpm --filter @loredock/web dev",
     "dev:core": "uv run --directory core python -m loredock",
     "dev:desktop": "pnpm --filter @loredock/desktop dev",

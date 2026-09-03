@@ -73,6 +73,31 @@ must not branch on free-form text.
 | `POST` | `/api/v1/libraries/{library_id}/search` | Hybrid or BM25-only search |
 | `GET` | `/api/v1/jobs/{job_id}` | Read persistent indexing job state |
 | `POST` | `/api/v1/jobs/{job_id}/retry` | Retry a failed indexing job, up to three attempts |
+| `GET` | `/api/v1/settings` | Read non-sensitive application preferences |
+| `PUT` | `/api/v1/settings` | Replace non-sensitive application preferences |
+| `GET` | `/api/v1/models/default` | Read the pinned local embedding model state |
+| `POST` | `/api/v1/models/default/install` | Start or reuse the pinned model install job |
+| `GET` | `/api/v1/models/jobs/latest` | Read the latest model install job, if any |
+| `GET` | `/api/v1/models/jobs/{job_id}` | Poll exact byte progress and state |
+| `POST` | `/api/v1/models/jobs/{job_id}/cancel` | Pause an active model download |
+| `POST` | `/api/v1/models/jobs/{job_id}/retry` | Resume a failed or canceled download |
+
+### Application settings
+
+Settings use a singleton resource persisted in `app.sqlite`. The v1 payload contains
+`onboarding_completed`, `theme` (`system`, `light`, or `dark`), and `default_search_mode`
+(`hybrid` or `lexical`). `PUT` replaces the complete resource so clients cannot accidentally retain
+unknown future values. Credentials and model-provider secrets are never part of this contract.
+
+### Managed default model
+
+The model status reports `missing`, `ready`, or `corrupt`, whether the current Core process is using
+it, download and disk-space requirements, and whether a restart is required. Installation uses a
+pinned repository revision and SHA-256 checksums. Model jobs report actual downloaded and total
+bytes; clients derive display percentages from those values. Failed, canceled, or interrupted
+downloads retain `.part` files and resume with an HTTP Range request. A server that ignores Range
+starts that asset again safely. Search continues through its fallback path until the verified model
+is activated on Core restart.
 
 ### Source list pagination
 

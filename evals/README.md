@@ -36,6 +36,7 @@ Install and verify the pinned E5 pilot package without adding model files to Git
 python -m uv run --directory core loredock-model install-e5 --directory models/multilingual-e5-small
 python -m uv run --directory core loredock-model smoke-e5 --directory models/multilingual-e5-small
 python -m uv run --directory core loredock-eval --model-dir models/multilingual-e5-small
+python -m uv run --directory core loredock-eval --model-dir models/multilingual-e5-small --vector-only
 python -m uv run --directory core loredock-eval --model-dir models/multilingual-e5-small --context-strategy child
 python -m uv run --directory core loredock-eval --model-dir models/multilingual-e5-small --context-strategy adjacent
 ```

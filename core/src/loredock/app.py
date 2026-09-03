@@ -85,7 +85,12 @@ def create_app(*, data_dir: Path | None = None) -> FastAPI:
 
         app.add_middleware(
             CORSMiddleware,
-            allow_origins=["http://tauri.localhost", "https://tauri.localhost"],
+            allow_origins=[
+                "http://tauri.localhost",
+                "https://tauri.localhost",
+                "http://127.0.0.1:1420",
+                "http://localhost:1420",
+            ],
             allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
             allow_headers=["Authorization", "Content-Type"],
         )

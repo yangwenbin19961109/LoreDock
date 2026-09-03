@@ -21,7 +21,9 @@
         "minWidth": 960,
         "minHeight": 640,
         "center": true,
-        "resizable": true
+        "resizable": false,
+        "maximizable": true,
+        "dragDropEnabled": false
       }
     ]
   },

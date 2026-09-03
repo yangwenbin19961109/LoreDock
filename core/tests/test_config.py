@@ -14,6 +14,8 @@ class HttpClient(Protocol):
 
     def post(self, url: str, **kwargs: object) -> Response: ...
 
+    def options(self, url: str, **kwargs: object) -> Response: ...
+
 
 def test_local_bind_is_allowed() -> None:
     Settings(host="127.0.0.1").assert_safe_bind_host()
@@ -58,3 +60,24 @@ def test_desktop_token_protects_core_and_enables_graceful_shutdown(
         assert client.post("/api/v1/desktop/shutdown", headers=headers).status_code == 202
 
     assert stopped is True
+
+
+def test_desktop_core_allows_tauri_dev_origin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("LOREDOCK_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("LOREDOCK_DESKTOP_TOKEN", "test-secret")
+
+    with TestClient(create_app()) as raw_client:
+        client = cast(HttpClient, raw_client)
+        response = client.options(
+            "/api/v1/health",
+            headers={
+                "Origin": "http://127.0.0.1:1420",
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": "authorization",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:1420"

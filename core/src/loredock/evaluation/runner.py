@@ -66,6 +66,7 @@ def run_evaluation(
     cases_path: Path,
     *,
     lexical_only: bool = False,
+    vector_only: bool = False,
     limit: int = 10,
     config: ChunkingConfig = _DEFAULT_CONFIG,
     provider: EmbeddingProvider | None = None,
@@ -98,6 +99,7 @@ def run_evaluation(
                 case["query"],
                 limit=limit,
                 lexical_only=lexical_only,
+                vector_only=vector_only,
                 context_strategy=context_strategy,
             )
             expected.append(set(case["expected_sources"]))
@@ -148,8 +150,10 @@ def run_evaluation(
             case_details.append(
                 {
                     "id": case["id"],
+                    "query": case["query"],
                     "expected_sources": case["expected_sources"],
                     "retrieved_sources": [result.source_id for result in results],
+                    "result_scores": [result.score for result in results],
                     "first_relevant_rank": first_relevant_rank,
                     "expected_passages_covered": [
                         passage
@@ -168,7 +172,7 @@ def run_evaluation(
     )
     details: dict[str, object] = {
         "metrics": asdict(metrics),
-        "mode": "bm25" if lexical_only else "hybrid",
+        "mode": "bm25" if lexical_only else "vector" if vector_only else "hybrid",
         "provider": active_provider.identifier,
         "dimensions": active_provider.dimensions,
         "documents": len(documents),

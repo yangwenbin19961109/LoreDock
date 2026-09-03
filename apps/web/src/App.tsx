@@ -1,4 +1,4 @@
-import type { FormEvent } from 'react'
+import type { DragEvent, FormEvent } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import type {
@@ -91,8 +91,10 @@ export function App() {
   const [hasSearched, setHasSearched] = useState(false)
   const [results, setResults] = useState<readonly SearchResult[]>([])
   const [expandedContexts, setExpandedContexts] = useState<ReadonlySet<string>>(new Set())
+  const [draggingFiles, setDraggingFiles] = useState(false)
   const [error, setError] = useState<string>()
   const fileInput = useRef<HTMLInputElement>(null)
+  const dragDepth = useRef(0)
   const previousDesktopCoreState = useRef<string | undefined>(undefined)
 
   const selectedLibrary = libraries.find((library) => library.id === selectedId)
@@ -318,6 +320,34 @@ export function App() {
     }
     setHighlightRange(range)
     setDetailTab('preview')
+  }
+
+  function resetSearch(): void {
+    setQuery('')
+    setResults([])
+    setHasSearched(false)
+    setExpandedContexts(new Set())
+    setHighlightRange(undefined)
+  }
+
+  function enterFileDrop(event: DragEvent<HTMLElement>): void {
+    event.preventDefault()
+    if (!event.dataTransfer.types.includes('Files')) return
+    dragDepth.current += 1
+    setDraggingFiles(true)
+  }
+
+  function leaveFileDrop(event: DragEvent<HTMLElement>): void {
+    event.preventDefault()
+    dragDepth.current = Math.max(0, dragDepth.current - 1)
+    if (dragDepth.current === 0) setDraggingFiles(false)
+  }
+
+  function finishFileDrop(event: DragEvent<HTMLElement>): void {
+    event.preventDefault()
+    dragDepth.current = 0
+    setDraggingFiles(false)
+    if (!busy) void importFiles(event.dataTransfer.files)
   }
 
   async function createLibrary(event: FormEvent<HTMLFormElement>): Promise<void> {
@@ -703,7 +733,25 @@ export function App() {
             </Button>
           </section>
         ) : (
-          <div className="workspace-grid">
+          <div
+            className={`workspace-grid ${draggingFiles ? 'workspace-grid--dragging' : ''}`}
+            onDragEnter={enterFileDrop}
+            onDragOver={(event) => {
+              event.preventDefault()
+              event.dataTransfer.dropEffect = 'copy'
+            }}
+            onDragLeave={leaveFileDrop}
+            onDrop={finishFileDrop}
+          >
+            {draggingFiles && (
+              <div className="drop-overlay" role="status" aria-live="polite">
+                <span className="drop-icon" aria-hidden="true">
+                  ⇧
+                </span>
+                <strong>松开即可添加资料</strong>
+                <span>支持 Markdown、TXT、PDF 和 DOCX</span>
+              </div>
+            )}
             <section className="center-column">
               <form className="search-toolbar" onSubmit={(event) => void search(event)}>
                 <label className="visually-hidden" htmlFor="knowledge-query">
@@ -728,6 +776,11 @@ export function App() {
                 <Button type="submit" disabled={!query.trim() || searching}>
                   {searching ? '搜索中…' : '搜索'}
                 </Button>
+                {(hasSearched || query) && (
+                  <Button type="button" variant="ghost" onClick={resetSearch} disabled={searching}>
+                    重置
+                  </Button>
+                )}
               </form>
               {hasSearched && (
                 <section className="search-results" aria-label="搜索结果">
@@ -746,7 +799,15 @@ export function App() {
                       >
                         <div className="result-meta">
                           <strong>{source?.name ?? '未知来源'}</strong>
-                          <span>{result.title_path.join(' / ') || '正文'}</span>
+                          <span className="result-location">
+                            {result.title_path.join(' / ') || '正文'}
+                          </span>
+                          <span
+                            className="result-score"
+                            title="词法与向量召回经过排名融合后的相对分数，不代表概率"
+                          >
+                            相关度 {result.score.toFixed(4)}
+                          </span>
                         </div>
                         <p>{expanded ? result.context_text : result.text}</p>
                         <div className="result-footer">
@@ -796,11 +857,6 @@ export function App() {
                   <button
                     className="drop-zone"
                     type="button"
-                    onDragOver={(event) => event.preventDefault()}
-                    onDrop={(event) => {
-                      event.preventDefault()
-                      void importFiles(event.dataTransfer.files)
-                    }}
                     onClick={() => fileInput.current?.click()}
                     disabled={busy}
                   >

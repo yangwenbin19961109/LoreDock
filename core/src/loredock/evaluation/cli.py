@@ -22,16 +22,20 @@ def main() -> None:
     )
     parser.add_argument("--output", type=Path)
     parser.add_argument("--lexical-only", action="store_true")
+    parser.add_argument("--vector-only", action="store_true")
     parser.add_argument("--model-dir", type=Path)
     parser.add_argument(
         "--context-strategy", choices=("child", "adjacent", "parent"), default="parent"
     )
     args = parser.parse_args()
+    if args.lexical_only and args.vector_only:
+        parser.error("--lexical-only and --vector-only cannot be used together")
     provider = load_e5_provider(args.model_dir) if args.model_dir is not None else None
     _, details = run_evaluation(
         args.documents,
         args.cases,
         lexical_only=args.lexical_only,
+        vector_only=args.vector_only,
         provider=provider,
         context_strategy=cast(ContextStrategy, args.context_strategy),
     )

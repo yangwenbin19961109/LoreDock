@@ -23,6 +23,16 @@ def test_rrf_is_deterministic() -> None:
     assert {item for item, _ in fused} == {"a", "b", "c"}
 
 
+def test_search_rejects_conflicting_single_channel_modes(tmp_path: Path) -> None:
+    with HybridSearchIndex(tmp_path / "index.sqlite", HashingEmbeddingProvider(32)) as index:
+        try:
+            index.search("query", lexical_only=True, vector_only=True)
+        except ValueError as error:
+            assert "cannot both be enabled" in str(error)
+        else:
+            raise AssertionError("conflicting retrieval modes must be rejected")
+
+
 def test_hybrid_and_lexical_fallback_return_citations(tmp_path: Path) -> None:
     document = ParsedDocument("hybrid", "混合检索", "向量不可用时使用 BM25 only 全文检索。")
     chunks = chunk_document(

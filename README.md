@@ -27,6 +27,7 @@ LoreDock 是一个轻量、本地优先的个人知识库。它帮助普通用�
 - [技术架构与开发方案](docs/technical-architecture.md)
 - [分阶段开发计划](docs/development-plan.md)
 - [当前开发进度与下一步](docs/current-progress.md)
+- [Phase 3 阶段验收问题与修复排期](docs/phase-3-acceptance-issues.md)
 - [开发环境与质量检查](docs/development-setup.md)
 - [HTTP API 契约](docs/api-contracts.md)
 - [架构决策记录](docs/decisions/README.md)

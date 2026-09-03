@@ -1,4 +1,4 @@
-import { createElement, type ReactNode } from 'react'
+import { createElement, type ReactNode, useEffect, useRef } from 'react'
 
 import type { CitationRange, SourceContentResponse } from '@loredock/contracts'
 import { buildPreviewBlocks } from './previewBlocks'
@@ -11,7 +11,7 @@ function highlightedText(text: string, absoluteStart: number, range?: CitationRa
   return (
     <>
       {text.slice(0, start)}
-      <mark>{text.slice(start, end)}</mark>
+      <mark data-preview-highlight="true">{text.slice(start, end)}</mark>
       {text.slice(end)}
     </>
   )
@@ -24,8 +24,17 @@ export function DocumentPreview({
   readonly content: SourceContentResponse
   readonly range?: CitationRange
 }) {
+  const previewRef = useRef<HTMLElement>(null)
+
+  useEffect(() => {
+    if (!range) return
+    previewRef.current
+      ?.querySelector('[data-preview-highlight="true"]')
+      ?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [content.source_id, range])
+
   return (
-    <article className="preview-document">
+    <article className="preview-document" ref={previewRef}>
       {buildPreviewBlocks(content.text).map((block, index) => {
         const body = highlightedText(block.text, content.char_start + block.start, range)
         const key = `${block.start}-${block.kind}-${index}`

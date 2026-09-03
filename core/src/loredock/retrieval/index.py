@@ -313,11 +313,15 @@ class HybridSearchIndex:
         candidate_limit: int = 50,
         rrf_k: int = 60,
         lexical_only: bool = False,
+        vector_only: bool = False,
         max_context_chars: int = 4000,
         context_strategy: ContextStrategy = "parent",
     ) -> list[SearchResult]:
-        lexical = self._lexical_ids(query, candidate_limit)
-        rankings = [lexical]
+        if lexical_only and vector_only:
+            raise ValueError("lexical_only and vector_only cannot both be enabled")
+        rankings: list[list[str]] = []
+        if not vector_only:
+            rankings.append(self._lexical_ids(query, candidate_limit))
         if not lexical_only:
             rankings.append(self._vector_ids(self.provider.embed_query(query), candidate_limit))
         fused = reciprocal_rank_fusion(rankings, k=rrf_k)

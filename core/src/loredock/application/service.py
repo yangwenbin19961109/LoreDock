@@ -15,6 +15,7 @@ from uuid import uuid4
 from loredock.application.errors import AppError
 from loredock.application.records import (
     AppSettingsRecord,
+    IndexStatusRecord,
     JobRecord,
     LibraryRecord,
     ModelJobRecord,
@@ -662,6 +663,29 @@ class LoreDockService:
             rows = self.database.connection.execute(statement, parameters).fetchall()
         has_more = len(rows) > limit
         return [self._source(row) for row in rows[:limit]], has_more
+
+    def get_index_status(self, library_id: str) -> IndexStatusRecord:
+        """Return metadata status, not a claim of index integrity or model quality."""
+        self.get_library(library_id)
+        with self._lock:
+            rows = self.database.connection.execute(
+                "SELECT status, COUNT(*) AS count FROM sources WHERE library_id=? GROUP BY status",
+                (library_id,),
+            ).fetchall()
+            counts = {str(row["status"]): int(row["count"]) for row in rows}
+            total = sum(counts.values())
+            ready = counts.get("ready", 0)
+            failed = counts.get("failed", 0)
+            return IndexStatusRecord(
+                library_id=library_id,
+                source_count=total,
+                ready_source_count=ready,
+                failed_source_count=failed,
+                pending_source_count=total - ready - failed,
+                index_present=self.layout.library(library_id).index.is_file(),
+                embedding_model=self.provider.identifier,
+                production_embeddings=not isinstance(self.provider, HashingEmbeddingProvider),
+            )
 
     def get_source(self, source_id: str) -> SourceRecord:
         with self._lock:

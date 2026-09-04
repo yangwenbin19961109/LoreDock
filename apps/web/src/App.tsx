@@ -20,6 +20,7 @@ import { Button } from '@loredock/ui'
 import { coreApi } from './api'
 import type { SourceListOptions } from './api'
 import { DocumentPreview } from './documentPreview'
+import { AgentConnections } from './AgentConnections'
 import { desktopCoreStatus, restartDesktopCore, type DesktopCoreStatus } from './runtime'
 
 type CoreState = 'checking' | 'ready' | 'recovering' | 'failed' | 'offline'
@@ -78,6 +79,7 @@ export function App() {
   const [showCreate, setShowCreate] = useState(false)
   const [showRename, setShowRename] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [showAgents, setShowAgents] = useState(false)
   const [settings, setSettings] = useState<AppSettings>()
   const [modelStatus, setModelStatus] = useState<ModelStatus>()
   const [modelJob, setModelJob] = useState<ModelJob | null>(null)
@@ -582,7 +584,11 @@ export function App() {
           <strong>LoreDock</strong>
         </div>
         <nav className="main-nav" aria-label="主导航">
-          <button className="nav-item nav-item--active" type="button">
+          <button
+            className={`nav-item ${!showAgents ? 'nav-item--active' : ''}`}
+            type="button"
+            onClick={() => setShowAgents(false)}
+          >
             <span>▣</span>全部知识库
           </button>
           <button className="nav-item" type="button" disabled>
@@ -591,7 +597,11 @@ export function App() {
           <button className="nav-item" type="button" disabled>
             <span>☆</span>收藏
           </button>
-          <button className="nav-item" type="button" disabled>
+          <button
+            className={`nav-item ${showAgents ? 'nav-item--active' : ''}`}
+            type="button"
+            onClick={() => setShowAgents(true)}
+          >
             <span>◎</span>Agent 连接
           </button>
           <button
@@ -621,7 +631,10 @@ export function App() {
               className={`library-item ${library.id === selectedId ? 'library-item--active' : ''}`}
               type="button"
               key={library.id}
-              onClick={() => selectLibrary(library.id)}
+              onClick={() => {
+                setShowAgents(false)
+                selectLibrary(library.id)
+              }}
             >
               <span className="library-glyph">▤</span>
               <span>
@@ -644,443 +657,455 @@ export function App() {
         </div>
       </aside>
 
-      <section className="work-area">
-        <header className="topbar">
-          <div>
-            <p className="eyebrow">知识库</p>
-            <h1>{selectedLibrary?.name ?? '开始使用 LoreDock'}</h1>
-          </div>
-          <div className="topbar-actions">
-            {selectedLibrary && (
-              <>
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    setRenameName(selectedLibrary.name)
-                    setShowRename(true)
-                  }}
-                  disabled={busy}
-                >
-                  重命名
-                </Button>
-                <Button
-                  variant="ghost"
-                  className="danger-action"
-                  onClick={() =>
-                    setDeleteTarget({
-                      kind: 'library',
-                      id: selectedLibrary.id,
-                      name: selectedLibrary.name
-                    })
-                  }
-                  disabled={busy}
-                >
-                  删除
-                </Button>
-              </>
-            )}
-            <Button variant="secondary" onClick={() => setShowCreate(true)} disabled={busy}>
-              创建知识库
-            </Button>
-            <Button onClick={() => fileInput.current?.click()} disabled={!selectedLibrary || busy}>
-              {busy ? '正在处理…' : '添加资料'}
-            </Button>
-            <input
-              ref={fileInput}
-              className="visually-hidden"
-              type="file"
-              multiple
-              accept=".md,.markdown,.txt,.pdf,.docx"
-              onChange={(event) => void importFiles(event.target.files)}
-            />
-          </div>
-        </header>
-        {error && (
-          <div className="error-banner" role="alert">
-            <span>{error}</span>
-            <button type="button" onClick={() => setError(undefined)} aria-label="关闭错误提示">
-              ×
-            </button>
-          </div>
-        )}
-        {(coreState === 'recovering' || coreState === 'failed') && coreDiagnostic && (
-          <section className={`core-diagnostic core-diagnostic--${coreState}`} role="alert">
+      {showAgents ? (
+        <AgentConnections libraries={libraries} />
+      ) : (
+        <section className="work-area">
+          <header className="topbar">
             <div>
-              <strong>{coreState === 'recovering' ? '正在恢复 Core' : 'Core 无法启动'}</strong>
-              <p>{coreDiagnostic.message ?? '桌面核心服务暂时不可用。'}</p>
-              {coreDiagnostic.errorCode && <code>{coreDiagnostic.errorCode}</code>}
+              <p className="eyebrow">知识库</p>
+              <h1>{selectedLibrary?.name ?? '开始使用 LoreDock'}</h1>
             </div>
-            <div className="core-diagnostic-actions">
-              <button type="button" onClick={() => void copyCoreDiagnostic()}>
-                复制诊断
-              </button>
-              {coreState === 'failed' && (
-                <button type="button" className="primary" onClick={() => void restartCore()}>
-                  重新启动 Core
-                </button>
-              )}
-            </div>
-          </section>
-        )}
-
-        {!selectedLibrary ? (
-          <section className="empty-state">
-            <div className="empty-symbol">◇</div>
-            <h2>创建你的第一个知识库</h2>
-            <p>把分散的 Markdown、TXT、PDF 和 DOCX 资料集中管理，稍后即可搜索和连接 Agent。</p>
-            <Button onClick={() => setShowCreate(true)} disabled={coreState !== 'ready'}>
-              创建知识库
-            </Button>
-          </section>
-        ) : (
-          <div
-            className={`workspace-grid ${draggingFiles ? 'workspace-grid--dragging' : ''}`}
-            onDragEnter={enterFileDrop}
-            onDragOver={(event) => {
-              event.preventDefault()
-              event.dataTransfer.dropEffect = 'copy'
-            }}
-            onDragLeave={leaveFileDrop}
-            onDrop={finishFileDrop}
-          >
-            {draggingFiles && (
-              <div className="drop-overlay" role="status" aria-live="polite">
-                <span className="drop-icon" aria-hidden="true">
-                  ⇧
-                </span>
-                <strong>松开即可添加资料</strong>
-                <span>支持 Markdown、TXT、PDF 和 DOCX</span>
-              </div>
-            )}
-            <section className="center-column">
-              <form className="search-toolbar" onSubmit={(event) => void search(event)}>
-                <label className="visually-hidden" htmlFor="knowledge-query">
-                  搜索问题
-                </label>
-                <span className="search-icon">⌕</span>
-                <input
-                  id="knowledge-query"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="搜索这个知识库"
-                  maxLength={2000}
-                />
-                <label className="search-mode">
-                  <input
-                    type="checkbox"
-                    checked={lexicalOnly}
-                    onChange={(event) => setLexicalOnly(event.target.checked)}
-                  />
-                  仅全文
-                </label>
-                <Button type="submit" disabled={!query.trim() || searching}>
-                  {searching ? '搜索中…' : '搜索'}
-                </Button>
-                {(hasSearched || query) && (
-                  <Button type="button" variant="ghost" onClick={resetSearch} disabled={searching}>
-                    重置
-                  </Button>
-                )}
-              </form>
-              {hasSearched && (
-                <section className="search-results" aria-label="搜索结果">
-                  <div className="result-summary">
-                    {results.length === 0 ? '没有找到相关内容' : `${results.length} 条相关内容`}
-                  </div>
-                  {results.map((result) => {
-                    const source = sources.find((item) => item.id === result.source_id)
-                    const expanded = expandedContexts.has(result.context_id)
-                    const hasMore = result.context_text !== result.text
-                    return (
-                      <article
-                        className="result-card"
-                        key={`${result.matched_chunk_id}-${result.context_id}`}
-                        onClick={() => selectSource(result.source_id, result.matched_range)}
-                      >
-                        <div className="result-meta">
-                          <strong>{source?.name ?? '未知来源'}</strong>
-                          <span className="result-location">
-                            {result.title_path.join(' / ') || '正文'}
-                          </span>
-                          <span
-                            className="result-score"
-                            title="词法与向量召回经过排名融合后的相对分数，不代表概率"
-                          >
-                            相关度 {result.score.toFixed(4)}
-                          </span>
-                        </div>
-                        <p>{expanded ? result.context_text : result.text}</p>
-                        <div className="result-footer">
-                          <span>
-                            {result.page
-                              ? `第 ${result.page} 页`
-                              : `字符 ${result.matched_range.char_start}–${result.matched_range.char_end}`}
-                          </span>
-                          {hasMore && (
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                toggleContext(result.context_id)
-                              }}
-                            >
-                              {expanded ? '收起上下文' : '展开上下文'}
-                            </button>
-                          )}
-                        </div>
-                      </article>
-                    )
-                  })}
-                </section>
-              )}
-              <section className="content-panel">
-                <div className="panel-heading">
-                  <div>
-                    <h2>资料</h2>
-                    <p>
-                      {sources.length === 0
-                        ? '尚未导入资料'
-                        : sourceFilter
-                          ? `当前页 ${sources.length} 份匹配资料`
-                          : `第 ${sourcePage} 页，共 ${sources.length} 份资料`}
-                    </p>
-                  </div>
-                  <Button
-                    variant="secondary"
-                    onClick={() => fileInput.current?.click()}
-                    disabled={busy}
-                  >
-                    ＋ 添加资料
-                  </Button>
-                </div>
-                {sources.length === 0 ? (
-                  <button
-                    className="drop-zone"
-                    type="button"
-                    onClick={() => fileInput.current?.click()}
-                    disabled={busy}
-                  >
-                    <span className="drop-icon">⇧</span>
-                    <strong>拖放或选择资料</strong>
-                    <span>支持 Markdown、TXT、PDF 和 DOCX</span>
-                  </button>
-                ) : (
-                  <>
-                    <div className="list-toolbar">
-                      <input
-                        aria-label="筛选资料"
-                        value={sourceFilter}
-                        placeholder="按名称、类型或状态筛选"
-                        onChange={(event) => {
-                          setSourceFilter(event.target.value)
-                          setSourceCursor(undefined)
-                          setSourceCursorHistory([])
-                          setNextSourceCursor(undefined)
-                        }}
-                      />
-                      <select
-                        aria-label="资料排序方式"
-                        value={sourceSort}
-                        onChange={(event) => {
-                          setSourceSort(event.target.value as SourceSort)
-                          setSourceCursor(undefined)
-                          setSourceCursorHistory([])
-                          setNextSourceCursor(undefined)
-                        }}
-                      >
-                        <option value="updated-desc">最近更新</option>
-                        <option value="name-asc">名称 A–Z</option>
-                        <option value="size-desc">文件大小</option>
-                      </select>
-                    </div>
-                    {sources.length === 0 ? (
-                      <div className="filter-empty">没有符合当前筛选条件的资料。</div>
-                    ) : (
-                      <div className="source-table" role="table" aria-label="资料列表">
-                        <div className="source-row source-row--header" role="row">
-                          <span>名称</span>
-                          <span>状态</span>
-                          <span>更新时间</span>
-                          <span>大小</span>
-                        </div>
-                        {sources.map((source) => {
-                          const job = jobs[source.id]
-                          const status =
-                            job?.status === 'succeeded' ? 'ready' : (job?.status ?? source.status)
-                          return (
-                            <button
-                              className={`source-row ${source.id === selectedSourceId ? 'source-row--selected' : ''}`}
-                              type="button"
-                              role="row"
-                              key={source.id}
-                              onClick={() => selectSource(source.id)}
-                            >
-                              <span className="source-name">
-                                <span className="file-glyph">▱</span>
-                                <strong>{source.name}</strong>
-                              </span>
-                              <span className={`status-pill status-pill--${status}`}>
-                                {sourceStatus(status)}
-                                {job && !['succeeded', 'failed'].includes(job.status)
-                                  ? ` ${Math.round(job.progress * 100)}%`
-                                  : ''}
-                              </span>
-                              <span>{formatDate(source.updated_at)}</span>
-                              <span>{formatBytes(source.size_bytes)}</span>
-                              {job?.status === 'failed' && (
-                                <span
-                                  className="row-action"
-                                  onClick={(event) => {
-                                    event.stopPropagation()
-                                    void retrySource(source.id)
-                                  }}
-                                >
-                                  重试
-                                </span>
-                              )}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    )}
-                    <nav className="pagination" aria-label="资料分页">
-                      <button
-                        type="button"
-                        disabled={sourceCursorHistory.length === 0}
-                        onClick={() => {
-                          const previous = sourceCursorHistory.at(-1)
-                          setSourceCursor(previous || undefined)
-                          setSourceCursorHistory((history) => history.slice(0, -1))
-                        }}
-                      >
-                        上一页
-                      </button>
-                      <span>
-                        第 {sourcePage} 页 · 每页 {SOURCE_PAGE_SIZE} 条
-                      </span>
-                      <button
-                        type="button"
-                        disabled={!nextSourceCursor}
-                        onClick={() => {
-                          if (!nextSourceCursor) return
-                          setSourceCursorHistory((history) => [...history, sourceCursor ?? ''])
-                          setSourceCursor(nextSourceCursor)
-                        }}
-                      >
-                        下一页
-                      </button>
-                    </nav>
-                  </>
-                )}
-              </section>
-            </section>
-
-            <aside className="detail-pane" aria-label="资料详情">
-              {!selectedSource ? (
-                <div className="detail-empty">
-                  <span>▱</span>
-                  <p>选择资料后可在这里预览原文和引用信息。</p>
-                </div>
-              ) : (
+            <div className="topbar-actions">
+              {selectedLibrary && (
                 <>
-                  <div className="detail-header">
-                    <div className="detail-title">
-                      <span className="file-glyph">▱</span>
-                      <div>
-                        <strong>{selectedSource.name}</strong>
-                        <span className={`status-pill status-pill--${selectedSource.status}`}>
-                          {sourceStatus(selectedSource.status)}
-                        </span>
-                      </div>
-                    </div>
-                    <button
-                      className="detail-delete"
-                      type="button"
-                      onClick={() =>
-                        setDeleteTarget({
-                          kind: 'source',
-                          id: selectedSource.id,
-                          name: selectedSource.name
-                        })
-                      }
-                      disabled={busy}
-                    >
-                      删除资料
-                    </button>
-                  </div>
-                  <div className="detail-tabs">
-                    <button
-                      className={detailTab === 'preview' ? 'active' : ''}
-                      type="button"
-                      onClick={() => setDetailTab('preview')}
-                    >
-                      预览
-                    </button>
-                    <button
-                      className={detailTab === 'details' ? 'active' : ''}
-                      type="button"
-                      onClick={() => setDetailTab('details')}
-                    >
-                      详情
-                    </button>
-                  </div>
-                  {detailTab === 'preview' ? (
-                    <div className="document-preview">
-                      {sourceContent ? (
-                        <>
-                          {!selectedSource.media_type.startsWith('text/') && (
-                            <p className="preview-notice">
-                              此处显示从原文件安全提取的纯文本，原文件不会被修改。
-                            </p>
-                          )}
-                          <DocumentPreview content={sourceContent} range={highlightRange} />
-                        </>
-                      ) : (
-                        <p>正在读取原文…</p>
-                      )}
-                    </div>
-                  ) : (
-                    <dl className="source-details">
-                      <div>
-                        <dt>文件类型</dt>
-                        <dd>{selectedSource.media_type}</dd>
-                      </div>
-                      <div>
-                        <dt>文件大小</dt>
-                        <dd>{formatBytes(selectedSource.size_bytes)}</dd>
-                      </div>
-                      <div>
-                        <dt>索引状态</dt>
-                        <dd>
-                          {sourceStatus(jobs[selectedSource.id]?.status ?? selectedSource.status)}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>添加时间</dt>
-                        <dd>{formatDate(selectedSource.created_at)}</dd>
-                      </div>
-                      <div>
-                        <dt>来源 ID</dt>
-                        <dd className="mono">{selectedSource.id}</dd>
-                      </div>
-                      {highlightRange && (
-                        <div>
-                          <dt>当前引用</dt>
-                          <dd>
-                            {highlightRange.page_start
-                              ? `第 ${highlightRange.page_start} 页`
-                              : `字符 ${highlightRange.char_start}–${highlightRange.char_end}`}
-                          </dd>
-                        </div>
-                      )}
-                    </dl>
-                  )}
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setRenameName(selectedLibrary.name)
+                      setShowRename(true)
+                    }}
+                    disabled={busy}
+                  >
+                    重命名
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="danger-action"
+                    onClick={() =>
+                      setDeleteTarget({
+                        kind: 'library',
+                        id: selectedLibrary.id,
+                        name: selectedLibrary.name
+                      })
+                    }
+                    disabled={busy}
+                  >
+                    删除
+                  </Button>
                 </>
               )}
-            </aside>
-          </div>
-        )}
-      </section>
+              <Button variant="secondary" onClick={() => setShowCreate(true)} disabled={busy}>
+                创建知识库
+              </Button>
+              <Button
+                onClick={() => fileInput.current?.click()}
+                disabled={!selectedLibrary || busy}
+              >
+                {busy ? '正在处理…' : '添加资料'}
+              </Button>
+              <input
+                ref={fileInput}
+                className="visually-hidden"
+                type="file"
+                multiple
+                accept=".md,.markdown,.txt,.pdf,.docx"
+                onChange={(event) => void importFiles(event.target.files)}
+              />
+            </div>
+          </header>
+          {error && (
+            <div className="error-banner" role="alert">
+              <span>{error}</span>
+              <button type="button" onClick={() => setError(undefined)} aria-label="关闭错误提示">
+                ×
+              </button>
+            </div>
+          )}
+          {(coreState === 'recovering' || coreState === 'failed') && coreDiagnostic && (
+            <section className={`core-diagnostic core-diagnostic--${coreState}`} role="alert">
+              <div>
+                <strong>{coreState === 'recovering' ? '正在恢复 Core' : 'Core 无法启动'}</strong>
+                <p>{coreDiagnostic.message ?? '桌面核心服务暂时不可用。'}</p>
+                {coreDiagnostic.errorCode && <code>{coreDiagnostic.errorCode}</code>}
+              </div>
+              <div className="core-diagnostic-actions">
+                <button type="button" onClick={() => void copyCoreDiagnostic()}>
+                  复制诊断
+                </button>
+                {coreState === 'failed' && (
+                  <button type="button" className="primary" onClick={() => void restartCore()}>
+                    重新启动 Core
+                  </button>
+                )}
+              </div>
+            </section>
+          )}
+
+          {!selectedLibrary ? (
+            <section className="empty-state">
+              <div className="empty-symbol">◇</div>
+              <h2>创建你的第一个知识库</h2>
+              <p>把分散的 Markdown、TXT、PDF 和 DOCX 资料集中管理，稍后即可搜索和连接 Agent。</p>
+              <Button onClick={() => setShowCreate(true)} disabled={coreState !== 'ready'}>
+                创建知识库
+              </Button>
+            </section>
+          ) : (
+            <div
+              className={`workspace-grid ${draggingFiles ? 'workspace-grid--dragging' : ''}`}
+              onDragEnter={enterFileDrop}
+              onDragOver={(event) => {
+                event.preventDefault()
+                event.dataTransfer.dropEffect = 'copy'
+              }}
+              onDragLeave={leaveFileDrop}
+              onDrop={finishFileDrop}
+            >
+              {draggingFiles && (
+                <div className="drop-overlay" role="status" aria-live="polite">
+                  <span className="drop-icon" aria-hidden="true">
+                    ⇧
+                  </span>
+                  <strong>松开即可添加资料</strong>
+                  <span>支持 Markdown、TXT、PDF 和 DOCX</span>
+                </div>
+              )}
+              <section className="center-column">
+                <form className="search-toolbar" onSubmit={(event) => void search(event)}>
+                  <label className="visually-hidden" htmlFor="knowledge-query">
+                    搜索问题
+                  </label>
+                  <span className="search-icon">⌕</span>
+                  <input
+                    id="knowledge-query"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder="搜索这个知识库"
+                    maxLength={2000}
+                  />
+                  <label className="search-mode">
+                    <input
+                      type="checkbox"
+                      checked={lexicalOnly}
+                      onChange={(event) => setLexicalOnly(event.target.checked)}
+                    />
+                    仅全文
+                  </label>
+                  <Button type="submit" disabled={!query.trim() || searching}>
+                    {searching ? '搜索中…' : '搜索'}
+                  </Button>
+                  {(hasSearched || query) && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={resetSearch}
+                      disabled={searching}
+                    >
+                      重置
+                    </Button>
+                  )}
+                </form>
+                {hasSearched && (
+                  <section className="search-results" aria-label="搜索结果">
+                    <div className="result-summary">
+                      {results.length === 0 ? '没有找到相关内容' : `${results.length} 条相关内容`}
+                    </div>
+                    {results.map((result) => {
+                      const source = sources.find((item) => item.id === result.source_id)
+                      const expanded = expandedContexts.has(result.context_id)
+                      const hasMore = result.context_text !== result.text
+                      return (
+                        <article
+                          className="result-card"
+                          key={`${result.matched_chunk_id}-${result.context_id}`}
+                          onClick={() => selectSource(result.source_id, result.matched_range)}
+                        >
+                          <div className="result-meta">
+                            <strong>{source?.name ?? '未知来源'}</strong>
+                            <span className="result-location">
+                              {result.title_path.join(' / ') || '正文'}
+                            </span>
+                            <span
+                              className="result-score"
+                              title="词法与向量召回经过排名融合后的相对分数，不代表概率"
+                            >
+                              相关度 {result.score.toFixed(4)}
+                            </span>
+                          </div>
+                          <p>{expanded ? result.context_text : result.text}</p>
+                          <div className="result-footer">
+                            <span>
+                              {result.page
+                                ? `第 ${result.page} 页`
+                                : `字符 ${result.matched_range.char_start}–${result.matched_range.char_end}`}
+                            </span>
+                            {hasMore && (
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  toggleContext(result.context_id)
+                                }}
+                              >
+                                {expanded ? '收起上下文' : '展开上下文'}
+                              </button>
+                            )}
+                          </div>
+                        </article>
+                      )
+                    })}
+                  </section>
+                )}
+                <section className="content-panel">
+                  <div className="panel-heading">
+                    <div>
+                      <h2>资料</h2>
+                      <p>
+                        {sources.length === 0
+                          ? '尚未导入资料'
+                          : sourceFilter
+                            ? `当前页 ${sources.length} 份匹配资料`
+                            : `第 ${sourcePage} 页，共 ${sources.length} 份资料`}
+                      </p>
+                    </div>
+                    <Button
+                      variant="secondary"
+                      onClick={() => fileInput.current?.click()}
+                      disabled={busy}
+                    >
+                      ＋ 添加资料
+                    </Button>
+                  </div>
+                  {sources.length === 0 ? (
+                    <button
+                      className="drop-zone"
+                      type="button"
+                      onClick={() => fileInput.current?.click()}
+                      disabled={busy}
+                    >
+                      <span className="drop-icon">⇧</span>
+                      <strong>拖放或选择资料</strong>
+                      <span>支持 Markdown、TXT、PDF 和 DOCX</span>
+                    </button>
+                  ) : (
+                    <>
+                      <div className="list-toolbar">
+                        <input
+                          aria-label="筛选资料"
+                          value={sourceFilter}
+                          placeholder="按名称、类型或状态筛选"
+                          onChange={(event) => {
+                            setSourceFilter(event.target.value)
+                            setSourceCursor(undefined)
+                            setSourceCursorHistory([])
+                            setNextSourceCursor(undefined)
+                          }}
+                        />
+                        <select
+                          aria-label="资料排序方式"
+                          value={sourceSort}
+                          onChange={(event) => {
+                            setSourceSort(event.target.value as SourceSort)
+                            setSourceCursor(undefined)
+                            setSourceCursorHistory([])
+                            setNextSourceCursor(undefined)
+                          }}
+                        >
+                          <option value="updated-desc">最近更新</option>
+                          <option value="name-asc">名称 A–Z</option>
+                          <option value="size-desc">文件大小</option>
+                        </select>
+                      </div>
+                      {sources.length === 0 ? (
+                        <div className="filter-empty">没有符合当前筛选条件的资料。</div>
+                      ) : (
+                        <div className="source-table" role="table" aria-label="资料列表">
+                          <div className="source-row source-row--header" role="row">
+                            <span>名称</span>
+                            <span>状态</span>
+                            <span>更新时间</span>
+                            <span>大小</span>
+                          </div>
+                          {sources.map((source) => {
+                            const job = jobs[source.id]
+                            const status =
+                              job?.status === 'succeeded' ? 'ready' : (job?.status ?? source.status)
+                            return (
+                              <button
+                                className={`source-row ${source.id === selectedSourceId ? 'source-row--selected' : ''}`}
+                                type="button"
+                                role="row"
+                                key={source.id}
+                                onClick={() => selectSource(source.id)}
+                              >
+                                <span className="source-name">
+                                  <span className="file-glyph">▱</span>
+                                  <strong>{source.name}</strong>
+                                </span>
+                                <span className={`status-pill status-pill--${status}`}>
+                                  {sourceStatus(status)}
+                                  {job && !['succeeded', 'failed'].includes(job.status)
+                                    ? ` ${Math.round(job.progress * 100)}%`
+                                    : ''}
+                                </span>
+                                <span>{formatDate(source.updated_at)}</span>
+                                <span>{formatBytes(source.size_bytes)}</span>
+                                {job?.status === 'failed' && (
+                                  <span
+                                    className="row-action"
+                                    onClick={(event) => {
+                                      event.stopPropagation()
+                                      void retrySource(source.id)
+                                    }}
+                                  >
+                                    重试
+                                  </span>
+                                )}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                      <nav className="pagination" aria-label="资料分页">
+                        <button
+                          type="button"
+                          disabled={sourceCursorHistory.length === 0}
+                          onClick={() => {
+                            const previous = sourceCursorHistory.at(-1)
+                            setSourceCursor(previous || undefined)
+                            setSourceCursorHistory((history) => history.slice(0, -1))
+                          }}
+                        >
+                          上一页
+                        </button>
+                        <span>
+                          第 {sourcePage} 页 · 每页 {SOURCE_PAGE_SIZE} 条
+                        </span>
+                        <button
+                          type="button"
+                          disabled={!nextSourceCursor}
+                          onClick={() => {
+                            if (!nextSourceCursor) return
+                            setSourceCursorHistory((history) => [...history, sourceCursor ?? ''])
+                            setSourceCursor(nextSourceCursor)
+                          }}
+                        >
+                          下一页
+                        </button>
+                      </nav>
+                    </>
+                  )}
+                </section>
+              </section>
+
+              <aside className="detail-pane" aria-label="资料详情">
+                {!selectedSource ? (
+                  <div className="detail-empty">
+                    <span>▱</span>
+                    <p>选择资料后可在这里预览原文和引用信息。</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="detail-header">
+                      <div className="detail-title">
+                        <span className="file-glyph">▱</span>
+                        <div>
+                          <strong>{selectedSource.name}</strong>
+                          <span className={`status-pill status-pill--${selectedSource.status}`}>
+                            {sourceStatus(selectedSource.status)}
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        className="detail-delete"
+                        type="button"
+                        onClick={() =>
+                          setDeleteTarget({
+                            kind: 'source',
+                            id: selectedSource.id,
+                            name: selectedSource.name
+                          })
+                        }
+                        disabled={busy}
+                      >
+                        删除资料
+                      </button>
+                    </div>
+                    <div className="detail-tabs">
+                      <button
+                        className={detailTab === 'preview' ? 'active' : ''}
+                        type="button"
+                        onClick={() => setDetailTab('preview')}
+                      >
+                        预览
+                      </button>
+                      <button
+                        className={detailTab === 'details' ? 'active' : ''}
+                        type="button"
+                        onClick={() => setDetailTab('details')}
+                      >
+                        详情
+                      </button>
+                    </div>
+                    {detailTab === 'preview' ? (
+                      <div className="document-preview">
+                        {sourceContent ? (
+                          <>
+                            {!selectedSource.media_type.startsWith('text/') && (
+                              <p className="preview-notice">
+                                此处显示从原文件安全提取的纯文本，原文件不会被修改。
+                              </p>
+                            )}
+                            <DocumentPreview content={sourceContent} range={highlightRange} />
+                          </>
+                        ) : (
+                          <p>正在读取原文…</p>
+                        )}
+                      </div>
+                    ) : (
+                      <dl className="source-details">
+                        <div>
+                          <dt>文件类型</dt>
+                          <dd>{selectedSource.media_type}</dd>
+                        </div>
+                        <div>
+                          <dt>文件大小</dt>
+                          <dd>{formatBytes(selectedSource.size_bytes)}</dd>
+                        </div>
+                        <div>
+                          <dt>索引状态</dt>
+                          <dd>
+                            {sourceStatus(jobs[selectedSource.id]?.status ?? selectedSource.status)}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>添加时间</dt>
+                          <dd>{formatDate(selectedSource.created_at)}</dd>
+                        </div>
+                        <div>
+                          <dt>来源 ID</dt>
+                          <dd className="mono">{selectedSource.id}</dd>
+                        </div>
+                        {highlightRange && (
+                          <div>
+                            <dt>当前引用</dt>
+                            <dd>
+                              {highlightRange.page_start
+                                ? `第 ${highlightRange.page_start} 页`
+                                : `字符 ${highlightRange.char_start}–${highlightRange.char_end}`}
+                            </dd>
+                          </div>
+                        )}
+                      </dl>
+                    )}
+                  </>
+                )}
+              </aside>
+            </div>
+          )}
+        </section>
+      )}
 
       {settings && !settings.onboarding_completed && (
         <div className="dialog-backdrop onboarding-backdrop" role="presentation">

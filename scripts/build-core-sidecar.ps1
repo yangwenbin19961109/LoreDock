@@ -22,6 +22,7 @@ if (-not $uvExecutable) {
     --specpath (Join-Path $coreDirectory "build") `
     --collect-all sqlite_vec `
     --hidden-import onnxruntime `
+    --hidden-import keyring.backends.Windows `
     (Join-Path $coreDirectory "src\loredock\__main__.py")
 
 if ($LASTEXITCODE -ne 0) {
@@ -34,3 +35,16 @@ if (-not (Test-Path -LiteralPath $sidecar -PathType Leaf)) {
 }
 
 Write-Output $sidecar
+
+# Keep the stdio console executable with its own runtime, inside the existing
+# Tauri Core resource tree. Never use --windowed: MCP requires standard streams.
+& $uvExecutable run --directory $coreDirectory python -m PyInstaller `
+    --noconfirm --clean --onedir --name loredock-mcp `
+    --distpath (Join-Path $coreDirectory "dist\loredock-core\bridge") `
+    --workpath (Join-Path $coreDirectory "build\mcp-pyinstaller") `
+    --specpath (Join-Path $coreDirectory "build") `
+    --hidden-import keyring.backends.Windows `
+    (Join-Path $coreDirectory "src\loredock\mcp\bridge.py")
+if ($LASTEXITCODE -ne 0) {
+    throw "MCP bridge packaging failed with exit code $LASTEXITCODE."
+}

@@ -7,6 +7,9 @@ requires-python = ">=3.12,<3.14"
 license = { text = "PolyForm-Noncommercial-1.0.0" }
 dependencies = [
   "fastapi>=0.116,<1",
+  "httpx>=0.28,<1",
+  "keyring>=25.7,<26",
+  "mcp>=1.28,<2",
   "numpy>=2,<3",
   "onnxruntime>=1.23,<2",
   "pydantic-settings>=2.10,<3",
@@ -22,6 +25,7 @@ dependencies = [
 loredock-eval = "loredock.evaluation.cli:main"
 loredock-bench = "loredock.evaluation.benchmark:main"
 loredock-model = "loredock.retrieval.model_cli:main"
+loredock-mcp = "loredock.mcp.bridge:main"
 
 [dependency-groups]
 dev = [

@@ -81,3 +81,15 @@ class SourceContent:
     text: str
     char_start: int
     char_end: int
+
+
+@dataclass(frozen=True, slots=True)
+class IndexStatusRecord:
+    library_id: str
+    source_count: int
+    ready_source_count: int
+    failed_source_count: int
+    pending_source_count: int
+    index_present: bool
+    embedding_model: str
+    production_embeddings: bool

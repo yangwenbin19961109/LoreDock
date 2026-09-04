@@ -1,6 +1,150 @@
 * {
   box-sizing: border-box;
 }
+
+.agent-area {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 28px 32px;
+  overflow: hidden;
+  background: var(--ld-color-background);
+}
+.nav-item:not(:disabled):not(.nav-item--active) {
+  color: var(--ld-color-text);
+}
+.agent-heading h1 {
+  margin: 0 0 10px;
+  font-size: 26px;
+}
+.agent-heading p {
+  margin: 0 0 24px;
+}
+.agent-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 32px;
+  min-height: 0;
+}
+.agent-columns > div,
+.agent-copy {
+  min-width: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+  padding-right: 8px;
+}
+.agent-area h2 {
+  font-size: 18px;
+  margin: 0 0 18px;
+}
+.agent-area p {
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.agent-form > label,
+.agent-copy > label {
+  display: block;
+  margin: 16px 0 8px;
+  font-weight: 600;
+}
+.agent-form > input,
+.agent-copy textarea {
+  width: 100%;
+  color: var(--ld-color-text);
+  background: var(--ld-color-surface);
+  border: 1px solid var(--ld-color-border);
+  border-radius: var(--ld-radius-control);
+  padding: 12px;
+}
+.agent-copy textarea {
+  min-height: 320px;
+  resize: vertical;
+  line-height: 1.6;
+  font-size: 13px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.agent-form fieldset {
+  margin: 24px 0 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.agent-form legend {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.agent-library-list {
+  max-height: 200px;
+  overflow: auto;
+}
+.agent-library-list label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 0;
+  cursor: pointer;
+}
+.agent-library-list input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--ld-color-primary);
+}
+.agent-library-list span {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.agent-help {
+  font-size: 13px;
+  color: var(--ld-color-text-muted);
+}
+.agent-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.agent-row h2 {
+  margin: 0;
+  flex: 1;
+}
+.agent-existing {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--ld-color-border);
+}
+.agent-existing ul {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0;
+}
+.agent-existing li {
+  padding: 18px 0;
+  border-bottom: 1px solid var(--ld-color-border);
+}
+.agent-existing strong {
+  overflow-wrap: anywhere;
+}
+.agent-existing li p {
+  margin: 8px 0;
+  font-size: 13px;
+}
+.agent-copy-empty {
+  padding: 32px 0;
+  color: var(--ld-color-text-muted);
+}
+.agent-error {
+  color: var(--ld-color-danger);
+}
+.agent-notice {
+  color: var(--ld-color-text);
+}
+.agent-area :is(input, textarea, button):focus-visible {
+  outline: 2px solid var(--ld-color-primary);
+  outline-offset: 3px;
+}
 body {
   min-width: 960px;
   height: 100vh;

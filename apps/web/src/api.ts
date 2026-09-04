@@ -39,7 +39,7 @@ export interface SourceListOptions {
   readonly sort?: 'updated-desc' | 'name-asc' | 'size-desc'
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const connection = await coreConnection()
   const endpoint = `${connection?.baseUrl ?? ''}${coreEndpoint(path)}`
   let requestInit = init

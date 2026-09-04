@@ -1,0 +1,5 @@
+# This existing disabled service must survive a LoreDock setup merge.
+[mcp_servers.keep_fixture]
+command = "fixture-do-not-run"
+enabled = false
+args = ["preserve-me"]

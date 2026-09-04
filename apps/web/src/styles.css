@@ -1,6 +1,78 @@
 * {
   box-sizing: border-box;
 }
+.collection-area {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 28px 32px;
+}
+.collection-area h1 {
+  margin: 0;
+  flex: 1;
+  font-size: 26px;
+}
+.collection-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
+  gap: 28px;
+  min-height: 0;
+  flex: 1;
+}
+.collection-columns > section {
+  min-width: 0;
+  overflow: auto;
+  padding: 4px;
+}
+.collection-columns ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.collection-source {
+  width: 100%;
+  padding: 16px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--ld-color-border);
+  color: var(--ld-color-text);
+  background: transparent;
+  text-align: start;
+  cursor: pointer;
+}
+.collection-source span {
+  display: block;
+  margin-top: 8px;
+  color: var(--ld-color-text-muted);
+}
+.collection-source[aria-pressed='true'],
+.collection-source:hover {
+  background: var(--ld-color-surface);
+}
+.collection-source,
+.collection-columns h2,
+.favorite-action {
+  overflow-wrap: anywhere;
+}
+.collection-preview {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  line-height: 1.75;
+}
+.favorite-action {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.favorite-action [role='alert'] {
+  font-size: 13px;
+}
+.collection-area button:focus-visible {
+  outline: 2px solid var(--ld-color-primary);
+  outline-offset: -2px;
+}
 
 .agent-area {
   display: flex;
@@ -43,12 +115,14 @@
   overflow-wrap: anywhere;
 }
 .agent-form > label,
-.agent-copy > label {
+.agent-copy > label,
+.agent-manual > label {
   display: block;
   margin: 16px 0 8px;
   font-weight: 600;
 }
 .agent-form > input,
+.agent-manual select,
 .agent-copy textarea {
   width: 100%;
   color: var(--ld-color-text);
@@ -141,9 +215,60 @@
 .agent-notice {
   color: var(--ld-color-text);
 }
-.agent-area :is(input, textarea, button):focus-visible {
+.agent-area :is(input, textarea, button, select, summary):focus-visible {
   outline: 2px solid var(--ld-color-primary);
   outline-offset: 3px;
+}
+.agent-form > input:focus-visible,
+.agent-manual :is(select, summary):focus-visible,
+.agent-copy textarea:focus-visible {
+  /* Full-width fields touch the scrollport edge; keep the focus ring inside it. */
+  outline-offset: -2px;
+}
+.agent-manual {
+  margin-top: 24px;
+  padding-block: 16px;
+  border-top: 1px solid var(--ld-color-border);
+}
+.agent-manual summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding-block: 8px;
+  overflow-wrap: anywhere;
+}
+.agent-manual ol {
+  padding-inline-start: 24px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.agent-manual li + li {
+  margin-top: 12px;
+}
+.agent-manual textarea {
+  min-height: 240px;
+}
+.agent-diagnostics label {
+  display: block;
+  margin-block: 16px 8px;
+  font-weight: 600;
+}
+.agent-diagnostics input {
+  width: 100%;
+  padding: 12px;
+  color: var(--ld-color-text);
+  background: var(--ld-color-surface);
+  border: 1px solid var(--ld-color-border);
+  border-radius: var(--ld-radius-control);
+}
+.agent-diagnostics input:focus-visible {
+  outline-offset: -2px;
+}
+.agent-existing .agent-diagnostics ul {
+  margin-block: 12px;
+}
+.agent-existing .agent-diagnostics li {
+  padding-block: 8px;
+  border: 0;
 }
 body {
   min-width: 960px;

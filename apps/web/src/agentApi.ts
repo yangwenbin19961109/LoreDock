@@ -7,6 +7,32 @@ export interface AgentConnection {
   readonly created_at: string
 }
 
+export interface AgentSetup {
+  readonly instructions: string
+  readonly configurations?: { readonly codex: string; readonly cursor: string }
+}
+
+export function parseSetup(value: unknown): AgentSetup {
+  const data = object(value)
+  if (typeof data.instructions !== 'string' || data.instructions.length > 50000)
+    throw new Error('连接说明格式不兼容。')
+  if (data.configurations === undefined) return { instructions: data.instructions }
+  const configs = object(data.configurations)
+  if (
+    typeof configs.codex !== 'string' ||
+    !configs.codex ||
+    configs.codex.length > 50000 ||
+    typeof configs.cursor !== 'string' ||
+    !configs.cursor ||
+    configs.cursor.length > 50000
+  )
+    throw new Error('手动配置格式不兼容，请更新 LoreDock。')
+  return {
+    instructions: data.instructions,
+    configurations: { codex: configs.codex, cursor: configs.cursor }
+  }
+}
+
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value))
     throw new Error('连接数据格式不兼容，请更新 LoreDock。')
@@ -47,11 +73,8 @@ export const agentApi = {
       })
     )
   },
-  async setup(id: string): Promise<string> {
-    const data = object(await request<unknown>(`agent-connections/${encodeURIComponent(id)}/setup`))
-    if (typeof data.instructions !== 'string' || data.instructions.length > 50000)
-      throw new Error('连接说明格式不兼容。')
-    return data.instructions
+  async setup(id: string): Promise<AgentSetup> {
+    return parseSetup(await request<unknown>(`agent-connections/${encodeURIComponent(id)}/setup`))
   },
   async revoke(id: string): Promise<boolean> {
     const data = object(

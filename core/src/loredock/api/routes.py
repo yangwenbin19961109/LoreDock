@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, File, Query, Request, Response, UploadFi
 from loredock.api.contracts import (
     AppSettingsResponse,
     AppSettingsUpdate,
+    FavoriteState,
     HealthResponse,
     JobResponse,
     LibraryCreate,
@@ -37,6 +38,42 @@ def get_service(request: Request) -> LoreDockService:
 
 
 Service = Annotated[LoreDockService, Depends(get_service)]
+
+
+@router.get("/sources/{source_id}/favorite", response_model=FavoriteState, tags=["sources"])
+def get_favorite(source_id: str, service: Service, response: Response) -> FavoriteState:
+    response.headers["Cache-Control"] = "no-store"
+    return FavoriteState(favorite=service.source_is_favorite(source_id))
+
+
+@router.put("/sources/{source_id}/favorite", response_model=FavoriteState, tags=["sources"])
+def set_favorite(
+    source_id: str, payload: FavoriteState, service: Service, response: Response
+) -> FavoriteState:
+    response.headers["Cache-Control"] = "no-store"
+    return FavoriteState(favorite=service.set_source_favorite(source_id, payload.favorite))
+
+
+@router.post("/sources/{source_id}/visit", status_code=204, tags=["sources"])
+def record_visit(source_id: str, service: Service) -> Response:
+    service.record_source_visit(source_id)
+    return Response(status_code=204, headers={"Cache-Control": "no-store"})
+
+
+@router.get("/source-collections/{kind}", response_model=Page[SourceResponse], tags=["sources"])
+def source_collection(
+    kind: Literal["recent", "favorites"],
+    service: Service,
+    response: Response,
+    limit: int = Query(default=50, ge=1, le=50),
+    offset: int = Query(default=0, ge=0),
+) -> Page[SourceResponse]:
+    records, more = service.list_source_collection(kind, limit=limit, offset=offset)
+    response.headers["Cache-Control"] = "no-store"
+    return Page(
+        items=[SourceResponse.model_validate(record) for record in records],
+        page=PageInfo(limit=limit, next_cursor=str(offset + limit) if more else None),
+    )
 
 
 @router.get("/settings", response_model=AppSettingsResponse, tags=["settings"])

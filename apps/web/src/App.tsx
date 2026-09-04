@@ -21,6 +21,9 @@ import { coreApi } from './api'
 import type { SourceListOptions } from './api'
 import { DocumentPreview } from './documentPreview'
 import { AgentConnections } from './AgentConnections'
+import { SourceCollection } from './SourceCollection'
+import { FavoriteButton } from './FavoriteButton'
+import { activityApi, type CollectionKind } from './activityApi'
 import { desktopCoreStatus, restartDesktopCore, type DesktopCoreStatus } from './runtime'
 
 type CoreState = 'checking' | 'ready' | 'recovering' | 'failed' | 'offline'
@@ -80,6 +83,7 @@ export function App() {
   const [showRename, setShowRename] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showAgents, setShowAgents] = useState(false)
+  const [collection, setCollection] = useState<CollectionKind>()
   const [settings, setSettings] = useState<AppSettings>()
   const [modelStatus, setModelStatus] = useState<ModelStatus>()
   const [modelJob, setModelJob] = useState<ModelJob | null>(null)
@@ -305,6 +309,8 @@ export function App() {
   }
 
   function selectLibrary(libraryId: LibraryId): void {
+    setCollection(undefined)
+    setShowAgents(false)
     resetSelection()
     setSources([])
     setSourceFilter('')
@@ -322,6 +328,13 @@ export function App() {
     }
     setHighlightRange(range)
     setDetailTab('preview')
+  }
+
+  function openSourceByUser(sourceId: SourceId, range?: CitationRange): void {
+    selectSource(sourceId, range)
+    void activityApi
+      .visit(sourceId)
+      .catch(() => setError('最近使用记录未保存，请确认 Core 已更新并在线。'))
   }
 
   function resetSearch(): void {
@@ -585,22 +598,42 @@ export function App() {
         </div>
         <nav className="main-nav" aria-label="主导航">
           <button
-            className={`nav-item ${!showAgents ? 'nav-item--active' : ''}`}
+            className={`nav-item ${!showAgents && !collection ? 'nav-item--active' : ''}`}
             type="button"
-            onClick={() => setShowAgents(false)}
+            onClick={() => {
+              setShowAgents(false)
+              setCollection(undefined)
+            }}
           >
             <span>▣</span>全部知识库
           </button>
-          <button className="nav-item" type="button" disabled>
-            <span>◷</span>最近使用
+          <button
+            className={`nav-item ${collection === 'recent' ? 'nav-item--active' : ''}`}
+            type="button"
+            onClick={() => {
+              setCollection('recent')
+              setShowAgents(false)
+            }}
+          >
+            <span aria-hidden="true">◷</span>最近使用
           </button>
-          <button className="nav-item" type="button" disabled>
-            <span>☆</span>收藏
+          <button
+            className={`nav-item ${collection === 'favorites' ? 'nav-item--active' : ''}`}
+            type="button"
+            onClick={() => {
+              setCollection('favorites')
+              setShowAgents(false)
+            }}
+          >
+            <span aria-hidden="true">☆</span>收藏
           </button>
           <button
             className={`nav-item ${showAgents ? 'nav-item--active' : ''}`}
             type="button"
-            onClick={() => setShowAgents(true)}
+            onClick={() => {
+              setShowAgents(true)
+              setCollection(undefined)
+            }}
           >
             <span>◎</span>Agent 连接
           </button>
@@ -657,7 +690,9 @@ export function App() {
         </div>
       </aside>
 
-      {showAgents ? (
+      {collection ? (
+        <SourceCollection key={collection} kind={collection} libraries={libraries} />
+      ) : showAgents ? (
         <AgentConnections libraries={libraries} />
       ) : (
         <section className="work-area">
@@ -819,7 +854,7 @@ export function App() {
                         <article
                           className="result-card"
                           key={`${result.matched_chunk_id}-${result.context_id}`}
-                          onClick={() => selectSource(result.source_id, result.matched_range)}
+                          onClick={() => openSourceByUser(result.source_id, result.matched_range)}
                         >
                           <div className="result-meta">
                             <strong>{source?.name ?? '未知来源'}</strong>
@@ -937,7 +972,7 @@ export function App() {
                                 type="button"
                                 role="row"
                                 key={source.id}
-                                onClick={() => selectSource(source.id)}
+                                onClick={() => openSourceByUser(source.id)}
                               >
                                 <span className="source-name">
                                   <span className="file-glyph">▱</span>
@@ -1032,6 +1067,7 @@ export function App() {
                         删除资料
                       </button>
                     </div>
+                    <FavoriteButton key={selectedSource.id} sourceId={selectedSource.id} />
                     <div className="detail-tabs">
                       <button
                         className={detailTab === 'preview' ? 'active' : ''}

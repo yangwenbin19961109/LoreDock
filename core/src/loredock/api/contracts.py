@@ -18,6 +18,10 @@ class HealthResponse(ApiModel):
     api_version: str
 
 
+class FavoriteState(ApiModel):
+    favorite: bool = Field(strict=True)
+
+
 class VersionResponse(ApiModel):
     product: Literal["LoreDock"] = "LoreDock"
     core_version: str

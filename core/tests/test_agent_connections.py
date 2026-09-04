@@ -115,6 +115,8 @@ def test_persistent_http_and_bridge_restore_after_core_restart(
             )
             assert setup.status_code == 200
             assert connection_id in setup.json()["instructions"]
+            assert set(setup.json()["configurations"]) == {"codex", "cursor"}
+            assert setup.headers["Cache-Control"] == "no-store"
             assert next(iter(vault.values.values())) not in setup.text
             assert (
                 await client.get(f"/api/v1/agent-connections/{connection_id}/setup")

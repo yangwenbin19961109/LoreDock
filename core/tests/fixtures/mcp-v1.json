@@ -1,0 +1,613 @@
+{
+  "inputs": {
+    "get_index_status": {
+      "additionalProperties": false,
+      "properties": {
+        "library_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Library Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "library_id"
+      ],
+      "title": "LibraryRequest",
+      "type": "object"
+    },
+    "get_source_info": {
+      "additionalProperties": false,
+      "properties": {
+        "library_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Library Id",
+          "type": "string"
+        },
+        "source_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Source Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "library_id",
+        "source_id"
+      ],
+      "title": "SourceInfoRequest",
+      "type": "object"
+    },
+    "list_libraries": {
+      "additionalProperties": false,
+      "properties": {
+        "after_id": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "After Id"
+        },
+        "limit": {
+          "default": 20,
+          "maximum": 50,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        }
+      },
+      "title": "ListLibrariesRequest",
+      "type": "object"
+    },
+    "list_sources": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cursor"
+        },
+        "library_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Library Id",
+          "type": "string"
+        },
+        "limit": {
+          "default": 20,
+          "maximum": 50,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "library_id"
+      ],
+      "title": "ListSourcesRequest",
+      "type": "object"
+    },
+    "read_source": {
+      "additionalProperties": false,
+      "properties": {
+        "length": {
+          "default": 4000,
+          "maximum": 8000,
+          "minimum": 1,
+          "title": "Length",
+          "type": "integer"
+        },
+        "library_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Library Id",
+          "type": "string"
+        },
+        "source_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Source Id",
+          "type": "string"
+        },
+        "start": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Start",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "library_id",
+        "source_id"
+      ],
+      "title": "ReadSourceRequest",
+      "type": "object"
+    },
+    "search_knowledge": {
+      "additionalProperties": false,
+      "properties": {
+        "lexical_only": {
+          "default": false,
+          "title": "Lexical Only",
+          "type": "boolean"
+        },
+        "library_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Library Id",
+          "type": "string"
+        },
+        "limit": {
+          "default": 8,
+          "maximum": 10,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "query": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Query",
+          "type": "string"
+        }
+      },
+      "required": [
+        "library_id",
+        "query"
+      ],
+      "title": "SearchKnowledgeRequest",
+      "type": "object"
+    }
+  },
+  "results": {
+    "get_index_status": {
+      "additionalProperties": false,
+      "properties": {
+        "embedding_model": {
+          "title": "Embedding Model",
+          "type": "string"
+        },
+        "failed_source_count": {
+          "title": "Failed Source Count",
+          "type": "integer"
+        },
+        "index_present": {
+          "title": "Index Present",
+          "type": "boolean"
+        },
+        "library_id": {
+          "title": "Library Id",
+          "type": "string"
+        },
+        "pending_source_count": {
+          "title": "Pending Source Count",
+          "type": "integer"
+        },
+        "production_embeddings": {
+          "title": "Production Embeddings",
+          "type": "boolean"
+        },
+        "ready_source_count": {
+          "title": "Ready Source Count",
+          "type": "integer"
+        },
+        "source_count": {
+          "title": "Source Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "library_id",
+        "source_count",
+        "ready_source_count",
+        "failed_source_count",
+        "pending_source_count",
+        "index_present",
+        "embedding_model",
+        "production_embeddings"
+      ],
+      "title": "IndexStatus",
+      "type": "object"
+    },
+    "get_source_info": {
+      "additionalProperties": false,
+      "properties": {
+        "created_at": {
+          "title": "Created At",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "library_id": {
+          "title": "Library Id",
+          "type": "string"
+        },
+        "media_type": {
+          "title": "Media Type",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "size_bytes": {
+          "title": "Size Bytes",
+          "type": "integer"
+        },
+        "status": {
+          "title": "Status",
+          "type": "string"
+        },
+        "updated_at": {
+          "title": "Updated At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "library_id",
+        "name",
+        "media_type",
+        "status",
+        "size_bytes",
+        "created_at",
+        "updated_at"
+      ],
+      "title": "SourceSummary",
+      "type": "object"
+    },
+    "list_libraries": {
+      "$defs": {
+        "LibrarySummary": {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "name": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "name"
+          ],
+          "title": "LibrarySummary",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/LibrarySummary"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "next_after_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Next After Id"
+        }
+      },
+      "required": [
+        "items",
+        "next_after_id"
+      ],
+      "title": "LibraryList",
+      "type": "object"
+    },
+    "list_sources": {
+      "$defs": {
+        "SourceSummary": {
+          "additionalProperties": false,
+          "properties": {
+            "created_at": {
+              "title": "Created At",
+              "type": "string"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "library_id": {
+              "title": "Library Id",
+              "type": "string"
+            },
+            "media_type": {
+              "title": "Media Type",
+              "type": "string"
+            },
+            "name": {
+              "title": "Name",
+              "type": "string"
+            },
+            "size_bytes": {
+              "title": "Size Bytes",
+              "type": "integer"
+            },
+            "status": {
+              "title": "Status",
+              "type": "string"
+            },
+            "updated_at": {
+              "title": "Updated At",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "library_id",
+            "name",
+            "media_type",
+            "status",
+            "size_bytes",
+            "created_at",
+            "updated_at"
+          ],
+          "title": "SourceSummary",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/SourceSummary"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "next_cursor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Next Cursor"
+        }
+      },
+      "required": [
+        "items",
+        "next_cursor"
+      ],
+      "title": "SourceList",
+      "type": "object"
+    },
+    "read_source": {
+      "additionalProperties": false,
+      "properties": {
+        "char_end": {
+          "title": "Char End",
+          "type": "integer"
+        },
+        "char_start": {
+          "title": "Char Start",
+          "type": "integer"
+        },
+        "library_id": {
+          "title": "Library Id",
+          "type": "string"
+        },
+        "next_start": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Next Start"
+        },
+        "source_id": {
+          "title": "Source Id",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "library_id",
+        "source_id",
+        "text",
+        "char_start",
+        "char_end",
+        "next_start"
+      ],
+      "title": "SourceExcerpt",
+      "type": "object"
+    },
+    "search_knowledge": {
+      "$defs": {
+        "KnowledgeHit": {
+          "additionalProperties": false,
+          "properties": {
+            "char_end": {
+              "title": "Char End",
+              "type": "integer"
+            },
+            "char_start": {
+              "title": "Char Start",
+              "type": "integer"
+            },
+            "chunk_id": {
+              "title": "Chunk Id",
+              "type": "string"
+            },
+            "library_id": {
+              "title": "Library Id",
+              "type": "string"
+            },
+            "matched_char_end": {
+              "title": "Matched Char End",
+              "type": "integer"
+            },
+            "page": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Page"
+            },
+            "parent_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Parent Id"
+            },
+            "read_reference": {
+              "$ref": "#/$defs/ReadSourceRequest"
+            },
+            "score": {
+              "title": "Score",
+              "type": "number"
+            },
+            "source_id": {
+              "title": "Source Id",
+              "type": "string"
+            },
+            "source_name": {
+              "title": "Source Name",
+              "type": "string"
+            },
+            "text": {
+              "title": "Text",
+              "type": "string"
+            },
+            "title_path": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Title Path",
+              "type": "array"
+            },
+            "truncated": {
+              "title": "Truncated",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "library_id",
+            "source_id",
+            "source_name",
+            "chunk_id",
+            "parent_id",
+            "text",
+            "score",
+            "char_start",
+            "char_end",
+            "matched_char_end",
+            "page",
+            "title_path",
+            "truncated",
+            "read_reference"
+          ],
+          "title": "KnowledgeHit",
+          "type": "object"
+        },
+        "ReadSourceRequest": {
+          "additionalProperties": false,
+          "properties": {
+            "length": {
+              "default": 4000,
+              "maximum": 8000,
+              "minimum": 1,
+              "title": "Length",
+              "type": "integer"
+            },
+            "library_id": {
+              "maxLength": 128,
+              "minLength": 1,
+              "title": "Library Id",
+              "type": "string"
+            },
+            "source_id": {
+              "maxLength": 128,
+              "minLength": 1,
+              "title": "Source Id",
+              "type": "string"
+            },
+            "start": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Start",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "library_id",
+            "source_id"
+          ],
+          "title": "ReadSourceRequest",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/KnowledgeHit"
+          },
+          "title": "Items",
+          "type": "array"
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "title": "KnowledgeResults",
+      "type": "object"
+    }
+  },
+  "service_errors": {
+    "access_denied": "Knowledge access is not permitted.",
+    "invalid_cursor": "The pagination cursor is invalid.",
+    "invalid_query": "The search query is invalid.",
+    "invalid_range": "The requested range is invalid.",
+    "library_not_found": "The library is unavailable.",
+    "source_not_found": "The source is unavailable.",
+    "source_not_ready": "The source is not ready to read."
+  }
+}

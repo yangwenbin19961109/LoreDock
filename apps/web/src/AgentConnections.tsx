@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import type { Library } from '@loredock/contracts'
 import { Button } from '@loredock/ui'
-import { agentApi, type AgentConnection } from './agentApi'
+import { agentApi, type AgentConnection, type AgentSetup } from './agentApi'
+import { ManualAgentSetup } from './ManualAgentSetup'
+import { AgentDiagnostics } from './AgentDiagnostics'
 
 export function AgentConnections({ libraries }: { readonly libraries: readonly Library[] }) {
   const [connections, setConnections] = useState<AgentConnection[]>([])
@@ -11,7 +13,8 @@ export function AgentConnections({ libraries }: { readonly libraries: readonly L
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
-  const [instructions, setInstructions] = useState('')
+  const [setup, setSetup] = useState<AgentSetup | null>(null)
+  const instructions = setup?.instructions ?? ''
   const [activeId, setActiveId] = useState('')
   const [confirmId, setConfirmId] = useState('')
 
@@ -22,7 +25,7 @@ export function AgentConnections({ libraries }: { readonly libraries: readonly L
       const items = await agentApi.list()
       setConnections(items)
       if (activeId && !items.some((item) => item.id === activeId)) {
-        setInstructions('')
+        setSetup(null)
         setActiveId('')
       }
     } catch {
@@ -54,10 +57,10 @@ export function AgentConnections({ libraries }: { readonly libraries: readonly L
     setBusy(true)
     setError('')
     setNotice('')
-    setInstructions('')
+    setSetup(null)
     setActiveId(id)
     try {
-      setInstructions(await agentApi.setup(id))
+      setSetup(await agentApi.setup(id))
     } catch {
       setError('未能生成说明。请刷新列表重试；当前安装包可能尚未包含独立 bridge。')
     } finally {
@@ -92,7 +95,7 @@ export function AgentConnections({ libraries }: { readonly libraries: readonly L
       const cleaned = await agentApi.revoke(connection.id)
       setConnections((current) => current.filter((item) => item.id !== connection.id))
       if (activeId === connection.id) {
-        setInstructions('')
+        setSetup(null)
         setActiveId('')
       }
       setConfirmId('')
@@ -230,6 +233,15 @@ export function AgentConnections({ libraries }: { readonly libraries: readonly L
                         </>
                       )}
                     </div>
+                    <AgentDiagnostics
+                      key={JSON.stringify([
+                        connection.library_ids,
+                        libraries.map((library) => library.id)
+                      ])}
+                      connection={connection}
+                      libraries={libraries}
+                      disabled={busy || loading}
+                    />
                   </li>
                 ))}
               </ul>
@@ -244,13 +256,14 @@ export function AgentConnections({ libraries }: { readonly libraries: readonly L
               <Button onClick={() => void copy()}>复制连接说明</Button>
               <label htmlFor="agent-instructions">连接说明（可手动选择复制）</label>
               <textarea id="agent-instructions" readOnly value={instructions} spellCheck={false} />
+              <ManualAgentSetup key={activeId} configurations={setup?.configurations} />
             </>
           ) : (
             <p className="agent-copy-empty">创建连接或选择“查看说明”后，安装说明会显示在这里。</p>
           )}
           <p className="agent-help">
             请保持 LoreDock 打开，并在同一台电脑、同一系统用户下使用。复制说明后，请让 Agent
-            验证连接是否成功。
+            发起一次新的检索验证。Core 在线、配置已复制，都不代表 Agent 已成功接入。
           </p>
         </section>
       </div>

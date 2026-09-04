@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 
 def utc_timestamp() -> str:
@@ -126,6 +126,23 @@ class AppDatabase:
                     PRAGMA user_version=4;
                     """
                 )
+
+        if version < 5:
+            with self.connection:
+                self.connection.execute(
+                    "CREATE TABLE IF NOT EXISTS source_activity ("
+                    "source_id TEXT PRIMARY KEY REFERENCES sources(id) ON DELETE CASCADE, "
+                    "last_opened TEXT, favorite_at TEXT)"
+                )
+                self.connection.execute(
+                    "CREATE INDEX IF NOT EXISTS activity_recent "
+                    "ON source_activity(last_opened DESC, source_id)"
+                )
+                self.connection.execute(
+                    "CREATE INDEX IF NOT EXISTS activity_favorites "
+                    "ON source_activity(favorite_at DESC, source_id)"
+                )
+                self.connection.execute("PRAGMA user_version=5")
 
     def recover_model_jobs(self) -> int:
         with self.connection:

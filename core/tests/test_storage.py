@@ -14,7 +14,7 @@ def test_migration_is_retry_safe(tmp_path: Path) -> None:
     version = second.connection.execute("PRAGMA user_version").fetchone()[0]
     second.close()
 
-    assert version == 4
+    assert version == 5
 
 
 def test_settings_migration_has_safe_defaults(tmp_path: Path) -> None:
@@ -39,7 +39,7 @@ def test_schema_two_migrates_to_settings_without_reset(tmp_path: Path) -> None:
     settings = database.connection.execute("SELECT theme FROM app_settings WHERE id=1").fetchone()
     database.close()
 
-    assert version == 4
+    assert version == 5
     assert settings is not None
     assert settings["theme"] == "system"
 

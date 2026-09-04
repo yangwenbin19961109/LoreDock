@@ -11,9 +11,10 @@ from loredock.application import LoreDockService
 from loredock.application.errors import AppError
 from loredock.mcp.contracts import ToolModel
 from loredock.mcp.credentials import ReadGrant, ReadGrantStore
+from loredock.mcp.diagnostics import DiagnosticRequest, DiagnosticResult, diagnose_connection
 from loredock.mcp.dispatch import ToolReply, call_tool
 from loredock.mcp.service import McpToolService
-from loredock.mcp.setup import connection_instructions
+from loredock.mcp.setup import connection_setup
 from loredock.storage.agent_connections import AgentConnectionStore
 
 router = APIRouter(prefix="/api/v1", tags=["agent-bridge"])
@@ -116,9 +117,27 @@ class RevokeResult(ToolModel):
     credential_removed: bool
 
 
+@router.post(
+    "/agent-connections/{connection_id}/diagnostics",
+    dependencies=[Depends(require_owner)],
+    response_model=DiagnosticResult,
+)
+def diagnose_agent_connection(
+    connection_id: str, payload: DiagnosticRequest, request: Request, response: Response
+) -> DiagnosticResult:
+    response.headers["Cache-Control"] = "no-store"
+    return diagnose_connection(
+        cast(LoreDockService, request.app.state.service),
+        connection_store(request),
+        connection_id,
+        payload,
+    )
+
+
 class ConnectionSetup(ToolModel):
     instructions: str
     runtime: str = "development"
+    configurations: dict[str, str] = Field(default_factory=dict)
 
 
 @router.get(
@@ -135,8 +154,10 @@ def get_connection_setup(
         )
     core = cast(LoreDockService, request.app.state.service)
     response.headers["Cache-Control"] = "no-store"
+    content = connection_setup(core.layout.root, connection_id)
     return ConnectionSetup(
-        instructions=connection_instructions(core.layout.root, connection_id),
+        instructions=content.instructions,
+        configurations=content.configurations,
         runtime="packaged" if getattr(sys, "frozen", False) else "development",
     )
 

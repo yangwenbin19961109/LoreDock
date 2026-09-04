@@ -698,6 +698,68 @@ class LoreDockService:
             )
         return self._source(row)
 
+    def source_is_favorite(self, source_id: str) -> bool:
+        with self._lock:
+            self.get_source(source_id)
+            row = self.database.connection.execute(
+                "SELECT favorite_at FROM source_activity WHERE source_id=?", (source_id,)
+            ).fetchone()
+            return row is not None and row["favorite_at"] is not None
+
+    def set_source_favorite(self, source_id: str, favorite: bool) -> bool:
+        with self._lock, self.database.transaction() as db:
+            self.get_source(source_id)
+            if favorite:
+                # Repeated PUT does not reorder an existing favorite.
+                db.execute(
+                    "INSERT INTO source_activity(source_id, favorite_at) VALUES (?, ?) "
+                    "ON CONFLICT(source_id) DO UPDATE SET "
+                    "favorite_at=COALESCE(source_activity.favorite_at, excluded.favorite_at)",
+                    (source_id, utc_timestamp()),
+                )
+            else:
+                db.execute(
+                    "UPDATE source_activity SET favorite_at=NULL WHERE source_id=?", (source_id,)
+                )
+                db.execute(
+                    "DELETE FROM source_activity WHERE source_id=? AND last_opened IS NULL",
+                    (source_id,),
+                )
+        return favorite
+
+    def record_source_visit(self, source_id: str) -> None:
+        with self._lock, self.database.transaction() as db:
+            self.get_source(source_id)
+            db.execute(
+                "INSERT INTO source_activity(source_id, last_opened) VALUES (?, ?) "
+                "ON CONFLICT(source_id) DO UPDATE SET last_opened=excluded.last_opened",
+                (source_id, utc_timestamp()),
+            )
+            # Bound recent history independently; pruning history never removes favorites.
+            db.execute(
+                "UPDATE source_activity SET last_opened=NULL WHERE source_id IN ("
+                "SELECT source_id FROM source_activity WHERE last_opened IS NOT NULL "
+                "ORDER BY last_opened DESC, source_id LIMIT -1 OFFSET 100)"
+            )
+            db.execute(
+                "DELETE FROM source_activity WHERE last_opened IS NULL AND favorite_at IS NULL"
+            )
+
+    def list_source_collection(
+        self, kind: str, *, limit: int = 50, offset: int = 0
+    ) -> tuple[list[SourceRecord], bool]:
+        if kind not in ("recent", "favorites") or not 1 <= limit <= 50 or offset < 0:
+            raise AppError("invalid_collection", "Collection parameters are invalid.")
+        column = "last_opened" if kind == "recent" else "favorite_at"
+        with self._lock:
+            rows = self.database.connection.execute(
+                f"SELECT s.* FROM source_activity a JOIN sources s ON s.id=a.source_id "
+                f"WHERE a.{column} IS NOT NULL ORDER BY a.{column} DESC, a.source_id "
+                "LIMIT ? OFFSET ?",
+                (limit + 1, offset),
+            ).fetchall()
+        return [self._source(row) for row in rows[:limit]], len(rows) > limit
+
     def read_source(self, source_id: str, start: int = 0, end: int | None = None) -> SourceContent:
         source = self.get_source(source_id)
         artifact = self.layout.library(source.library_id).artifacts / f"{source_id}.txt"

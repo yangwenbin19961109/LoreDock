@@ -56,6 +56,7 @@ for (const theme of ['light', 'dark']) {
       await route.fulfill({ json: data })
     })
     await page.goto('/')
+    await expect(page.locator('input[type="file"]')).toHaveAttribute('accept', /\.xlsx/)
     await expect(page.getByRole('button', { name: '收藏资料', exact: true })).toBeEnabled()
     expect(visits).toBe(0)
     await page.locator('button.source-row').first().click()

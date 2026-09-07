@@ -75,7 +75,8 @@ def run_evaluation(
     documents = [
         parse_path(path, source_id=path.stem)
         for path in sorted(documents_dir.iterdir())
-        if path.suffix.lower() in {".md", ".markdown", ".txt", ".pdf", ".docx"}
+        if path.suffix.lower()
+        in {".md", ".markdown", ".txt", ".pdf", ".docx", ".pptx", ".xlsx", ".htm", ".html"}
     ]
     hierarchies = [chunk_document_hierarchy(document, config) for document in documents]
     chunks = [chunk for hierarchy in hierarchies for chunk in hierarchy.chunks]

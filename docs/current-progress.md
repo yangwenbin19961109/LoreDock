@@ -2,7 +2,7 @@
 
 - 记录日期：2026-09-07
 - 当前分支：`main`
-- 当前里程碑：D-A01 与本轮收藏/最近使用界面调整已通过桌面人工验收；准备完成质量门禁、提交与推送，随后进入 Phase 5。Cursor 实机验收继续暂缓
+- 当前里程碑：Phase 5 第一批 HTML/HTM 与导入进度已通过桌面验收；第二批安全 OOXML 基础层已实现，下一步接入 PPTX；Cursor 实机验收继续暂缓
 
 ## 已完成
 
@@ -17,14 +17,19 @@
 - 集合页提供前 8000 字符的安全文本预览，直接跳转主知识库具体分页位置未实现。最近使用/收藏仍待用户人工验收。
 - 用户要求重启后，已通过 SQLite backup API 备份 app.sqlite 和 agent-connections.sqlite 至用户数据目录 backups/before-v5-20260904-155224。备份不进入仓库，不包含原始资料副本或系统凭据。
 - 新版 Core 与桌面程序已启动，实际元数据库版本确认是 v5。迁移不改变检索索引；旧 Core 不支持直接读取 v5，不应修改 user_version 降级。详见 [ADR 0014](decisions/0014-source-activity.md)。
-- 最近验证：2026-09-07 `pnpm check` 全部通过，包括格式、ESLint、TypeScript、组件契约测试、37 项 Web 测试、Web 生产构建和 Tauri 无安装包 Release 构建；另有 7 项浏览器测试通过。保留 Windows 桌面 Release 构建的链接器信息警告。本轮未重跑 Core 测试，因为没有修改 Python、数据库、API 或 MCP 实现。
-- 下一步：提交并推送本轮修复、UI 调整与规划文档；随后进入 Phase 5 首批资料能力扩展。Cursor、干净安装矩阵、跨平台验证及排序调优保留原排期。
+- 最近验证：2026-09-07 Phase 5 第一批 Ruff、Pyright、Core 全量测试（97 项通过、1 项系统测试默认跳过）、Web ESLint、37 项测试、生产构建及 7 项浏览器测试通过。保留既有 Starlette/httpx 弃用警告；本批未重建 Windows 独立 Core 或安装包。
+- [D-A02 与 D-A03](desktop-acceptance-issues.md) 均由用户复验通过并关闭。Phase 5 第二批完成 PPTX/XLSX 依赖、许可证、打包面和定位模型评估，接受 [ADR 0015](decisions/0015-ooxml-readonly-ingestion.md) 的受限只读 OOXML 方案。
+- 安全 OOXML ZIP/XML/关系基础层已实现并纳入定向攻击性测试；PPTX 已按演示顺序提取文本框和表格，并以幻灯片页码提供引用定位，Core/API/UI 已开放 `.pptx` 导入且桌面人工验收通过。演讲者备注、图片 OCR、动画和版面还原不在首版范围。
+- XLSX 已按工作簿顺序提取共享/内联字符串、数值、布尔值和公式缓存值，保留工作表名称、状态、单元格坐标和工作表页码；Core/API/UI 已开放 `.xlsx`。Core 113 项测试、Web 38 项单元测试、生产构建和 2 项浏览器契约通过，待桌面真实文件验收。
+- PPTX 自动验证已通过：Ruff、Pyright、Core 110 项测试（另 1 项系统测试默认跳过）、Web 格式/lint/类型检查、38 项单元测试及 2 项浏览器契约测试。因测试程序正在运行并占用 Rust 构建目录，本批尚未重建桌面二进制和安装包。
+- 下一步：完成 XLSX 全量自动回归并重启桌面程序供真实文件人工验收。Core 异步导入、Cursor、干净安装矩阵、跨平台验证及排序调优保留原排期。
 - 测试程序保持运行供验收。本次提交和推送不包含安装包、模型、数据库、备份、私人资料、凭据或运行日志。
 
 ### Core 与检索
 
 - 知识库和资料的创建、读取、重命名、删除及完整数据清理。
-- Markdown、TXT、PDF、DOCX 导入、解析、分块、持久化任务与失败重试。
+- Markdown、TXT、PDF、DOCX、PPTX、XLSX、HTML/HTM 导入、解析、分块、持久化任务与失败重试。
+- Phase 5 第一批 HTML/HTM 使用标准库安全提取文本，不执行脚本或加载外部资源；代码与自动回归完成，桌面真实文件验收待进行，详见 [Phase 5 交付记录](phase-5-delivery.md)。
 - SQLite FTS5、sqlite-vec、BM25-only 降级、向量召回和 RRF 混合检索。
 - Child 排名、Parent/相邻 Child 按需上下文扩展和精确引用范围。
 - multilingual-e5-small INT8 ONNX 本地 Provider、模型资产安装与校验。
@@ -72,6 +77,7 @@
 - 搜索排序已有可解释分数与首轮同集诊断；融合权重、分块、模型和 reranker 调优按项目决定推迟到真实 Agent/MCP 接入之后。
 - 已记录第二期 [Agent Skill 管理功能](agent-skill-management.md)：计划通过 UI 管理本地 Skill 的导入、预览、启停、Agent 分配、配置生成、更新和移除；不属于当前一期 Phase 0～7，本期不开发，也不阻塞一期验收和发布。
 - 已记录 [Agent 客户端兼容性扩展](agent-client-compatibility.md)：手动添加将从 Codex/Cursor 固定选项演进为可扩展客户端适配器和通用 MCP 兜底；当前仅记录，尚未实现，也不把未经真实验收的客户端宣称为已支持。
+- 已记录 [搜索关联图片展示优化](image-preview-backlog.md)：项目不引入本地 OCR；后续保留图片与来源页码/结构锚点，在搜索命中文字时展示相关原图。该增强不阻塞当前 XLSX 验收。
 
 ## Phase 3 人工验收问题
 

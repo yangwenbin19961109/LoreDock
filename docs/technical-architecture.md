@@ -85,7 +85,7 @@ Python Core 以独立进程运行，桌面端不要求系统预装 Python。发�
 ```text
 libraries/{library_id}/
 ├── raw/                 # 用户导入的原始资料或可信副本
-├── artifacts/           # Markdown、OCR、缩略图等衍生文件
+├── artifacts/           # 解析文本、关联图片、缩略图等可重建衍生文件
 ├── index.sqlite         # 分块、FTS、向量和索引元数据
 └── manifest.json        # 构建契约与版本信息
 ```
@@ -135,7 +135,7 @@ libraries/{library_id}/
   → 标记 ready
 ```
 
-首批支持格式：Markdown、TXT、PDF、DOCX、PPTX、XLSX、HTML、URL 和纯文本笔记。扫描 PDF 的 OCR 作为可选能力，避免拖慢基础安装包。
+首批支持格式：Markdown、TXT、PDF、DOCX、PPTX、XLSX、HTML、URL 和纯文本笔记。项目不引入本地 OCR；后续仅提取并保存图片与页码/结构锚点，在文字搜索命中后展示相关原图，详见 [搜索关联图片展示优化](image-preview-backlog.md)。
 
 任务状态建议：
 

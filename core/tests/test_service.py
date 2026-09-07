@@ -4,11 +4,75 @@ import time
 from collections.abc import Callable
 from io import BytesIO
 from pathlib import Path
+from zipfile import ZIP_DEFLATED, ZipFile
 
 import pytest
 
 from loredock.application import LoreDockService
 from loredock.application import service as service_module
+
+
+def _pptx_bytes() -> bytes:
+    payload = BytesIO()
+    with ZipFile(payload, "w", compression=ZIP_DEFLATED) as archive:
+        archive.writestr(
+            "ppt/presentation.xml",
+            """<p:presentation
+              xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+              xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+              <p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>
+            </p:presentation>""",
+        )
+        archive.writestr(
+            "ppt/_rels/presentation.xml.rels",
+            """<Relationships
+              xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+              <Relationship Id="rId1"
+                Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide"
+                Target="slides/slide1.xml"/>
+            </Relationships>""",
+        )
+        archive.writestr(
+            "ppt/slides/slide1.xml",
+            """<p:sld
+              xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+              xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+              <p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r>
+                <a:t>grounded slide citation</a:t>
+              </a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld>
+            </p:sld>""",
+        )
+    return payload.getvalue()
+
+
+def _xlsx_bytes() -> bytes:
+    payload = BytesIO()
+    with ZipFile(payload, "w", compression=ZIP_DEFLATED) as archive:
+        archive.writestr(
+            "xl/workbook.xml",
+            """<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+              xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+              <sheets><sheet name="Knowledge" sheetId="1" r:id="rId1"/></sheets>
+            </workbook>""",
+        )
+        archive.writestr(
+            "xl/_rels/workbook.xml.rels",
+            """<Relationships
+              xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+              <Relationship Id="rId1"
+                Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"
+                Target="worksheets/sheet1.xml"/>
+            </Relationships>""",
+        )
+        archive.writestr(
+            "xl/worksheets/sheet1.xml",
+            """<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+              <sheetData><row r="1"><c r="A1" t="inlineStr"><is>
+                <t>grounded spreadsheet citation</t>
+              </is></c></row></sheetData>
+            </worksheet>""",
+        )
+    return payload.getvalue()
 
 
 def test_library_source_search_read_delete_round_trip(tmp_path: Path) -> None:
@@ -79,6 +143,76 @@ def test_old_index_contract_is_rebuilt_without_changing_source(tmp_path: Path) -
         connection.close()
     assert version == ("3",)
     assert json.loads(paths.manifest.read_text(encoding="utf-8"))["schema_version"] == 3
+    service.close()
+
+
+def test_html_source_is_imported_indexed_and_read_as_inert_text(tmp_path: Path) -> None:
+    service = LoreDockService(tmp_path)
+    library = service.create_library("HTML")
+
+    source, job, duplicate = service.import_source(
+        library.id,
+        "guide.html",
+        "text/html",
+        BytesIO(
+            b"<h1>Offline knowledge</h1><p>citation handle is stable</p>"
+            b"<script>private active content</script>"
+        ),
+    )
+
+    assert source.status == "ready"
+    assert source.media_type == "text/html"
+    assert job.status == "succeeded"
+    assert duplicate is False
+    results = service.search(library.id, "citation handle", lexical_only=True)
+    assert results[0].source_id == source.id
+    content = service.read_source(source.id)
+    assert "Offline knowledge" in content.text
+    assert "private active content" not in content.text
+    service.close()
+
+
+def test_pptx_source_is_imported_indexed_and_read_with_slide_metadata(tmp_path: Path) -> None:
+    service = LoreDockService(tmp_path)
+    library = service.create_library("Presentations")
+
+    source, job, duplicate = service.import_source(
+        library.id,
+        "briefing.pptx",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        BytesIO(_pptx_bytes()),
+    )
+
+    assert source.status == "ready"
+    assert job.status == "succeeded"
+    assert duplicate is False
+    results = service.search(library.id, "grounded citation", lexical_only=True)
+    assert results[0].source_id == source.id
+    assert results[0].page == 1
+    assert "grounded slide citation" in service.read_source(source.id).text
+    service.close()
+
+
+def test_xlsx_source_is_imported_indexed_and_read_with_sheet_metadata(tmp_path: Path) -> None:
+    service = LoreDockService(tmp_path)
+    library = service.create_library("Spreadsheets")
+
+    source, job, duplicate = service.import_source(
+        library.id,
+        "catalog.xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        BytesIO(_xlsx_bytes()),
+    )
+
+    assert source.status == "ready"
+    assert job.status == "succeeded"
+    assert duplicate is False
+    results = service.search(library.id, "spreadsheet citation", lexical_only=True)
+    assert results[0].source_id == source.id
+    assert results[0].page == 1
+    content = service.read_source(source.id)
+    assert "# 工作表 1: Knowledge" in content.text
+    assert "A1: grounded spreadsheet citation" in content.text
     service.close()
 
 

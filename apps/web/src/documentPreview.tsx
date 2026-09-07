@@ -31,7 +31,7 @@ export function DocumentPreview({
     previewRef.current
       ?.querySelector('[data-preview-highlight="true"]')
       ?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-  }, [content.source_id, range])
+  }, [content.char_end, content.char_start, content.source_id, range])
 
   return (
     <article className="preview-document" ref={previewRef}>

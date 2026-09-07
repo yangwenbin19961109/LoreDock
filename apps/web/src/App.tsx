@@ -29,6 +29,14 @@ import { desktopCoreStatus, restartDesktopCore, type DesktopCoreStatus } from '.
 type CoreState = 'checking' | 'ready' | 'recovering' | 'failed' | 'offline'
 type DetailTab = 'preview' | 'details'
 type SourceSort = NonNullable<SourceListOptions['sort']>
+
+interface ImportProgressState {
+  readonly total: number
+  readonly completed: number
+  readonly currentName: string
+  readonly status: 'running' | 'succeeded' | 'failed'
+}
+
 const SOURCE_PAGE_SIZE = 10
 type DeleteTarget =
   | { readonly kind: 'library'; readonly id: LibraryId; readonly name: string }
@@ -79,6 +87,7 @@ export function App() {
   const [selectedSourceId, setSelectedSourceId] = useState<SourceId>()
   const [sourceContent, setSourceContent] = useState<SourceContentResponse>()
   const [highlightRange, setHighlightRange] = useState<CitationRange>()
+  const [previewRequestRevision, setPreviewRequestRevision] = useState(0)
   const [detailTab, setDetailTab] = useState<DetailTab>('preview')
   const [showCreate, setShowCreate] = useState(false)
   const [showRename, setShowRename] = useState(false)
@@ -92,6 +101,7 @@ export function App() {
   const [renameName, setRenameName] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>()
   const [busy, setBusy] = useState(false)
+  const [importProgress, setImportProgress] = useState<ImportProgressState>()
   const [query, setQuery] = useState('')
   const [lexicalOnly, setLexicalOnly] = useState(false)
   const [searching, setSearching] = useState(false)
@@ -166,7 +176,6 @@ export function App() {
         const status = await desktopCoreStatus()
         if (!status || disposed) return
         const previous = previousDesktopCoreState.current
-        previousDesktopCoreState.current = status.state
         setCoreDiagnostic(status)
         if (status.state === 'ready') {
           setCoreState('ready')
@@ -185,6 +194,7 @@ export function App() {
             setModelStatus(loadedModel)
             setModelJob(loadedModelJob)
             setLexicalOnly(loadedSettings.default_search_mode === 'lexical')
+            previousDesktopCoreState.current = 'ready'
             setSelectedId((current) =>
               current && page.items.some((library) => library.id === current)
                 ? current
@@ -193,16 +203,25 @@ export function App() {
             setError(undefined)
           }
         } else if (status.state === 'recovering') {
+          previousDesktopCoreState.current = status.state
           setCoreState('recovering')
         } else if (status.state === 'failed') {
+          previousDesktopCoreState.current = status.state
           setCoreState('failed')
         } else {
+          previousDesktopCoreState.current = status.state
           setCoreState('checking')
         }
       } catch (reason) {
         if (!disposed) {
-          setCoreState('failed')
-          setError(reason instanceof Error ? reason.message : '无法读取 Core 运行状态。')
+          previousDesktopCoreState.current = undefined
+          setError(
+            reason instanceof TypeError
+              ? 'Core 已启动，但数据连接暂时不可用，正在自动重试。'
+              : reason instanceof Error
+                ? reason.message
+                : '无法读取 Core 运行状态。'
+          )
         }
       }
     }
@@ -272,15 +291,27 @@ export function App() {
   useEffect(() => {
     if (!selectedSourceId) return
     const controller = new AbortController()
+    let disposed = false
+    const previewRange = highlightRange
+      ? {
+          start: Math.max(0, highlightRange.char_start - 2000),
+          end: Math.max(highlightRange.char_end + 2000, highlightRange.char_start + 6000)
+        }
+      : undefined
     void coreApi
-      .readSource(selectedSourceId, controller.signal)
-      .then(setSourceContent)
+      .readSource(selectedSourceId, controller.signal, previewRange)
+      .then((content) => {
+        if (!disposed) setSourceContent(content)
+      })
       .catch((reason: unknown) => {
         if (reason instanceof DOMException && reason.name === 'AbortError') return
-        setError(reason instanceof Error ? reason.message : '原文读取失败。')
+        if (!disposed) setError(reason instanceof Error ? reason.message : '原文读取失败。')
       })
-    return () => controller.abort()
-  }, [selectedSourceId])
+    return () => {
+      disposed = true
+      controller.abort()
+    }
+  }, [highlightRange, previewRequestRevision, selectedSourceId])
 
   useEffect(() => {
     if (activeJobs.length === 0) return
@@ -325,11 +356,11 @@ export function App() {
   }
 
   function selectSource(sourceId: SourceId, range?: CitationRange): void {
-    if (sourceId !== selectedSourceId) {
-      setSelectedSourceId(sourceId)
-      setSourceContent(undefined)
-    }
+    setSelectedSourceId(sourceId)
+    // Do not let a new citation try to scroll within the stale window from the same source.
+    setSourceContent(undefined)
     setHighlightRange(range)
+    setPreviewRequestRevision((revision) => revision + 1)
     setDetailTab('preview')
   }
 
@@ -447,12 +478,32 @@ export function App() {
 
   async function importFiles(files: FileList | null): Promise<void> {
     if (!selectedId || !files?.length) return
+    const selectedFiles = Array.from(files)
     setBusy(true)
     setError(undefined)
+    setImportProgress({
+      total: selectedFiles.length,
+      completed: 0,
+      currentName: selectedFiles[0]?.name ?? '',
+      status: 'running'
+    })
     try {
       const imported: SourceImportResponse[] = []
-      for (const file of Array.from(files))
+      for (const [index, file] of selectedFiles.entries()) {
+        setImportProgress({
+          total: selectedFiles.length,
+          completed: index,
+          currentName: file.name,
+          status: 'running'
+        })
         imported.push(await coreApi.importSource(selectedId, file))
+        setImportProgress({
+          total: selectedFiles.length,
+          completed: index + 1,
+          currentName: file.name,
+          status: index + 1 === selectedFiles.length ? 'succeeded' : 'running'
+        })
+      }
       setJobs((current) => {
         const next = { ...current }
         for (const item of imported) next[item.source.id] = item.job
@@ -468,6 +519,7 @@ export function App() {
       const firstSourceId = imported[0]?.source.id ?? page.items[0]?.id
       if (firstSourceId) selectSource(firstSourceId)
     } catch (reason) {
+      setImportProgress((current) => (current ? { ...current, status: 'failed' } : current))
       setError(reason instanceof Error ? reason.message : '资料导入失败。')
     } finally {
       setBusy(false)
@@ -747,7 +799,7 @@ export function App() {
                 className="visually-hidden"
                 type="file"
                 multiple
-                accept=".md,.markdown,.txt,.pdf,.docx"
+                accept=".md,.markdown,.txt,.pdf,.docx,.pptx,.xlsx,.htm,.html"
                 onChange={(event) => void importFiles(event.target.files)}
               />
             </div>
@@ -759,6 +811,41 @@ export function App() {
                 ×
               </button>
             </div>
+          )}
+          {importProgress && (
+            <section
+              className={`import-progress import-progress--${importProgress.status}`}
+              role="status"
+              aria-live="polite"
+              aria-label="资料导入进度"
+            >
+              <div className="import-progress-copy">
+                <strong>
+                  {importProgress.status === 'running'
+                    ? `正在处理 ${importProgress.completed + 1}/${importProgress.total}`
+                    : importProgress.status === 'succeeded'
+                      ? `已完成 ${importProgress.completed}/${importProgress.total}`
+                      : `导入停在 ${Math.min(importProgress.completed + 1, importProgress.total)}/${importProgress.total}`}
+                </strong>
+                <span title={importProgress.currentName}>{importProgress.currentName}</span>
+              </div>
+              <progress
+                {...(importProgress.status === 'running' && importProgress.total === 1
+                  ? {}
+                  : { value: importProgress.completed })}
+                max={importProgress.total}
+                aria-label={`已完成 ${importProgress.completed}，共 ${importProgress.total} 份资料`}
+              />
+              {importProgress.status !== 'running' && (
+                <button
+                  type="button"
+                  onClick={() => setImportProgress(undefined)}
+                  aria-label="关闭导入进度"
+                >
+                  ×
+                </button>
+              )}
+            </section>
           )}
           {(coreState === 'recovering' || coreState === 'failed') && coreDiagnostic && (
             <section className={`core-diagnostic core-diagnostic--${coreState}`} role="alert">
@@ -784,7 +871,10 @@ export function App() {
             <section className="empty-state">
               <div className="empty-symbol">◇</div>
               <h2>创建你的第一个知识库</h2>
-              <p>把分散的 Markdown、TXT、PDF 和 DOCX 资料集中管理，稍后即可搜索和连接 Agent。</p>
+              <p>
+                把分散的 Markdown、TXT、PDF、DOCX、PPTX、XLSX 和 HTML
+                资料集中管理，稍后即可搜索和连接 Agent。
+              </p>
               <Button onClick={() => setShowCreate(true)} disabled={coreState !== 'ready'}>
                 创建知识库
               </Button>
@@ -806,7 +896,7 @@ export function App() {
                     ⇧
                   </span>
                   <strong>松开即可添加资料</strong>
-                  <span>支持 Markdown、TXT、PDF 和 DOCX</span>
+                  <span>支持 Markdown、TXT、PDF、DOCX、PPTX、XLSX 和 HTML</span>
                 </div>
               )}
               <section className="center-column">
@@ -924,7 +1014,7 @@ export function App() {
                     >
                       <span className="drop-icon">⇧</span>
                       <strong>拖放或选择资料</strong>
-                      <span>支持 Markdown、TXT、PDF 和 DOCX</span>
+                      <span>支持 Markdown、TXT、PDF、DOCX、PPTX、XLSX 和 HTML</span>
                     </button>
                   ) : (
                     <>

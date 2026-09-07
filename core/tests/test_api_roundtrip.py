@@ -1,5 +1,7 @@
+from io import BytesIO
 from pathlib import Path
 from typing import Protocol, cast
+from zipfile import ZIP_DEFLATED, ZipFile
 
 from fastapi.testclient import TestClient
 from httpx import Response
@@ -14,6 +16,36 @@ class HttpClient(Protocol):
     def post(self, url: str, **kwargs: object) -> Response: ...
 
     def delete(self, url: str, **kwargs: object) -> Response: ...
+
+
+def _xlsx_upload() -> bytes:
+    payload = BytesIO()
+    with ZipFile(payload, "w", compression=ZIP_DEFLATED) as archive:
+        archive.writestr(
+            "xl/workbook.xml",
+            """<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+              xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+              <sheets><sheet name="API" sheetId="1" r:id="rId1"/></sheets>
+            </workbook>""",
+        )
+        archive.writestr(
+            "xl/_rels/workbook.xml.rels",
+            """<Relationships
+              xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+              <Relationship Id="rId1"
+                Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"
+                Target="worksheets/sheet1.xml"/>
+            </Relationships>""",
+        )
+        archive.writestr(
+            "xl/worksheets/sheet1.xml",
+            """<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+              <sheetData><row r="1"><c r="C7" t="inlineStr"><is>
+                <t>HTTP spreadsheet reference</t>
+              </is></c></row></sheetData>
+            </worksheet>""",
+        )
+    return payload.getvalue()
 
 
 def test_http_api_completes_knowledge_round_trip(tmp_path: Path) -> None:
@@ -51,4 +83,74 @@ def test_http_api_completes_knowledge_round_trip(tmp_path: Path) -> None:
 
     assert client.delete(f"/api/v1/sources/{source_id}").status_code == 204
     assert client.delete(f"/api/v1/libraries/{library_id}").status_code == 204
+    service.close()
+
+
+def test_http_api_accepts_html_without_indexing_active_content(tmp_path: Path) -> None:
+    service = LoreDockService(tmp_path)
+    app = create_app(data_dir=tmp_path)
+    app.state.service = service
+    client = cast(HttpClient, TestClient(app))
+    library_id = str(client.post("/api/v1/libraries", json={"name": "HTML"}).json()["id"])
+
+    imported = client.post(
+        f"/api/v1/libraries/{library_id}/sources",
+        files={
+            "file": (
+                "reference.html",
+                "<main>grounded citation</main><script>untrusted command</script>",
+                "text/html",
+            )
+        },
+    )
+
+    assert imported.status_code == 201
+    source_id = str(imported.json()["source"]["id"])
+    content = client.get(f"/api/v1/sources/{source_id}/content")
+    assert content.json()["text"] == "grounded citation"
+    assert (
+        client.post(
+            f"/api/v1/libraries/{library_id}/search", json={"query": "grounded citation"}
+        ).json()["items"][0]["source_id"]
+        == source_id
+    )
+    assert (
+        client.post(
+            f"/api/v1/libraries/{library_id}/search",
+            json={"query": "untrusted command", "lexical_only": True},
+        ).json()["items"]
+        == []
+    )
+    service.close()
+
+
+def test_http_api_accepts_xlsx_with_sheet_and_cell_reference(tmp_path: Path) -> None:
+    service = LoreDockService(tmp_path)
+    app = create_app(data_dir=tmp_path)
+    app.state.service = service
+    client = cast(HttpClient, TestClient(app))
+    library_id = str(client.post("/api/v1/libraries", json={"name": "XLSX"}).json()["id"])
+
+    imported = client.post(
+        f"/api/v1/libraries/{library_id}/sources",
+        files={
+            "file": (
+                "reference.xlsx",
+                _xlsx_upload(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+    )
+
+    assert imported.status_code == 201
+    source_id = str(imported.json()["source"]["id"])
+    result = client.post(
+        f"/api/v1/libraries/{library_id}/search",
+        json={"query": "spreadsheet reference", "lexical_only": True},
+    ).json()["items"][0]
+    assert result["source_id"] == source_id
+    assert result["page"] == 1
+    content = client.get(f"/api/v1/sources/{source_id}/content").json()["text"]
+    assert "# 工作表 1: API" in content
+    assert "C7: HTTP spreadsheet reference" in content
     service.close()

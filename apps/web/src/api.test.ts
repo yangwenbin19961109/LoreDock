@@ -180,6 +180,28 @@ describe('LoreDock Core API client', () => {
     })
   })
 
+  it('requests a bounded source window for a search-result preview', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          source_id: 'source-id',
+          text: '命中正文',
+          char_start: 8000,
+          char_end: 8004
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await coreApi.readSource('source-id' as SourceId, undefined, { start: 8000, end: 14000 })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/sources/source-id/content?start=8000&end=14000',
+      { signal: undefined }
+    )
+  })
+
   it('accepts an empty 204 response when deleting a source', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }))
     vi.stubGlobal('fetch', fetchMock)

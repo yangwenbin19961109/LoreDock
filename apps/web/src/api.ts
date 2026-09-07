@@ -161,8 +161,15 @@ export const coreApi = {
     })
   },
 
-  readSource(sourceId: Source['id'], signal?: AbortSignal): Promise<SourceContentResponse> {
-    return request<SourceContentResponse>(`sources/${sourceId}/content`, { signal })
+  readSource(
+    sourceId: Source['id'],
+    signal?: AbortSignal,
+    range?: { readonly start: number; readonly end: number }
+  ): Promise<SourceContentResponse> {
+    const query = range
+      ? `?${new URLSearchParams({ start: String(range.start), end: String(range.end) })}`
+      : ''
+    return request<SourceContentResponse>(`sources/${sourceId}/content${query}`, { signal })
   },
 
   deleteSource(sourceId: SourceId): Promise<void> {

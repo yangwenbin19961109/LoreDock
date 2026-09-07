@@ -119,8 +119,10 @@ The Phase 2 upload endpoint completes indexing before returning. Job state is pe
 the operation, interrupted jobs are recovered as failed at startup, and the same use case can move
 to a background worker without changing its HTTP result contracts.
 
-Supported uploads are Markdown, TXT, PDF and DOCX, with a 100 MiB per-file limit. A repeated content
-hash within the same library returns the existing source and job with `duplicate: true`.
+Supported uploads are Markdown, TXT, PDF, DOCX, PPTX, XLSX and HTML, with a 100 MiB per-file limit. PPTX text is extracted in slide order from text boxes and tables, with slide-number citation metadata. XLSX text is extracted in workbook order with sheet names and cell coordinates; formulas are never executed. HTML is
+converted to inert UTF-8 text; script, style, template and embedded-frame content is excluded. A
+repeated content hash within the same library returns the existing source and job with
+`duplicate: true`.
 
 ## Phase 2.5 search context fields
 

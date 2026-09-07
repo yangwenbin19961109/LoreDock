@@ -566,6 +566,58 @@ h2 {
   border: 0;
   cursor: pointer;
 }
+.import-progress {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(140px, 0.45fr) 24px;
+  align-items: center;
+  gap: 14px;
+  margin: -8px 0 18px;
+  padding: 10px 14px;
+  color: var(--ld-color-text);
+  background: color-mix(in srgb, var(--ld-color-primary) 7%, var(--ld-color-surface));
+  border: 1px solid color-mix(in srgb, var(--ld-color-primary) 24%, var(--ld-color-border));
+  border-radius: 8px;
+}
+.import-progress-copy {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 10px;
+}
+.import-progress-copy strong {
+  flex: 0 0 auto;
+  font-size: 12px;
+}
+.import-progress-copy span {
+  overflow: hidden;
+  color: var(--ld-color-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.import-progress progress {
+  width: 100%;
+  height: 7px;
+  accent-color: var(--ld-color-primary);
+}
+.import-progress button {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  color: var(--ld-color-text-muted);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.import-progress button:hover {
+  color: var(--ld-color-text);
+  background: color-mix(in srgb, var(--ld-color-text) 8%, transparent);
+}
+.import-progress--failed {
+  background: color-mix(in srgb, var(--ld-color-danger) 7%, var(--ld-color-surface));
+  border-color: color-mix(in srgb, var(--ld-color-danger) 28%, var(--ld-color-border));
+}
 .core-diagnostic {
   display: flex;
   align-items: center;
@@ -1244,6 +1296,10 @@ h2 {
     min-height: 36px;
     padding-inline: 10px;
     font-size: 12px;
+  }
+  .import-progress {
+    grid-template-columns: minmax(0, 1fr) 120px 24px;
+    gap: 10px;
   }
   .workspace-grid {
     grid-template-columns: minmax(0, 1fr) minmax(280px, 0.68fr);

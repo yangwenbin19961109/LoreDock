@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "pnpm --dir ../.. --filter @loredock/web dev",
     "beforeBuildCommand": "pnpm --dir ../.. --filter @loredock/web build",
-    "devUrl": "http://127.0.0.1:1420",
+    "devUrl": "http://127.0.0.1:1421",
     "frontendDist": "../../web/dist"
   },
   "app": {

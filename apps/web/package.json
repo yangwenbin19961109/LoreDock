@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc -b && vite build",
-    "dev": "vite --host 127.0.0.1 --port 1420",
-    "preview": "vite preview --host 127.0.0.1 --port 1420",
+    "dev": "vite --host 127.0.0.1 --port 1421",
+    "preview": "vite preview --host 127.0.0.1 --port 1421",
     "test": "vitest run src",
     "typecheck": "tsc -b"
   },

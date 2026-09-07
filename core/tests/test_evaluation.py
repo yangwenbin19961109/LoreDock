@@ -39,7 +39,8 @@ def test_expected_passages_exist_in_an_expected_source() -> None:
     documents = {
         path.stem: parse_path(path).text
         for path in (fixtures / "documents").iterdir()
-        if path.suffix.lower() in {".md", ".markdown", ".txt", ".pdf", ".docx"}
+        if path.suffix.lower()
+        in {".md", ".markdown", ".txt", ".pdf", ".docx", ".pptx", ".xlsx", ".htm", ".html"}
     }
 
     invalid_cases = [

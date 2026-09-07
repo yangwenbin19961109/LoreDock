@@ -7,7 +7,7 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   reporter: 'list',
   use: {
-    baseURL: 'http://127.0.0.1:1420',
+    baseURL: 'http://127.0.0.1:1421',
     trace: 'on-first-retry'
   },
   projects: [
@@ -18,7 +18,7 @@ export default defineConfig({
   ],
   webServer: {
     command: 'pnpm --filter @loredock/web dev',
-    url: 'http://127.0.0.1:1420',
+    url: 'http://127.0.0.1:1421',
     reuseExistingServer: !process.env.CI
   }
 })

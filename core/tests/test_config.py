@@ -73,11 +73,11 @@ def test_desktop_core_allows_tauri_dev_origin(
         response = client.options(
             "/api/v1/health",
             headers={
-                "Origin": "http://127.0.0.1:1420",
+                "Origin": "http://127.0.0.1:1421",
                 "Access-Control-Request-Method": "GET",
                 "Access-Control-Request-Headers": "authorization",
             },
         )
 
     assert response.status_code == 200
-    assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:1420"
+    assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:1421"

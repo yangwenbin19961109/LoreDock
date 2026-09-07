@@ -125,8 +125,8 @@ def create_app(
             allow_origins=[
                 "http://tauri.localhost",
                 "https://tauri.localhost",
-                "http://127.0.0.1:1420",
-                "http://localhost:1420",
+                "http://127.0.0.1:1421",
+                "http://localhost:1421",
             ],
             allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
             allow_headers=["Authorization", "Content-Type"],

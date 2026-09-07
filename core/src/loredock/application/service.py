@@ -43,7 +43,17 @@ from loredock.retrieval.model_assets import (
 from loredock.storage import AppDatabase, DataLayout
 from loredock.storage.database import utc_timestamp
 
-SUPPORTED_SUFFIXES = {".md", ".markdown", ".txt", ".pdf", ".docx"}
+SUPPORTED_SUFFIXES = {
+    ".md",
+    ".markdown",
+    ".txt",
+    ".pdf",
+    ".docx",
+    ".pptx",
+    ".xlsx",
+    ".htm",
+    ".html",
+}
 MAX_SOURCE_BYTES = 100 * 1024 * 1024
 
 

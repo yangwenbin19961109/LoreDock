@@ -7,6 +7,7 @@ import os
 import shutil
 import sqlite3
 from dataclasses import asdict
+from io import BytesIO
 from pathlib import Path
 from threading import Event, RLock, Thread
 from typing import BinaryIO
@@ -23,7 +24,7 @@ from loredock.application.records import (
     SourceContent,
     SourceRecord,
 )
-from loredock.ingestion import parse_path
+from loredock.ingestion import UrlFetcher, WebFetchError, parse_path
 from loredock.retrieval import (
     ChunkingConfig,
     EmbeddingProvider,
@@ -58,12 +59,18 @@ MAX_SOURCE_BYTES = 100 * 1024 * 1024
 
 
 class LoreDockService:
-    def __init__(self, data_dir: Path, provider: EmbeddingProvider | None = None) -> None:
+    def __init__(
+        self,
+        data_dir: Path,
+        provider: EmbeddingProvider | None = None,
+        url_fetcher: UrlFetcher | None = None,
+    ) -> None:
         self.layout = DataLayout(data_dir)
         self.layout.initialize()
         self.database = AppDatabase(self.layout.root / "app.sqlite")
         self.database.recover_interrupted_jobs()
         self.provider = provider or HashingEmbeddingProvider()
+        self.url_fetcher = url_fetcher or UrlFetcher()
         self.chunking = ChunkingConfig()
         self._lock = RLock()
         self._model_stop = Event()
@@ -396,6 +403,8 @@ class LoreDockService:
             status=str(row["status"]),
             content_hash=str(row["content_hash"]),
             size_bytes=int(row["size_bytes"]),
+            source_kind=row["source_kind"],
+            origin_url=str(row["origin_url"]) if row["origin_url"] is not None else None,
             error=str(row["error"]) if row["error"] is not None else None,
             created_at=str(row["created_at"]),
             updated_at=str(row["updated_at"]),
@@ -508,9 +517,22 @@ class LoreDockService:
             )
 
     def import_source(
-        self, library_id: str, filename: str, media_type: str | None, stream: BinaryIO
+        self,
+        library_id: str,
+        filename: str,
+        media_type: str | None,
+        stream: BinaryIO,
+        *,
+        source_kind: str = "file",
+        origin_url: str | None = None,
     ) -> tuple[SourceRecord, JobRecord, bool]:
         self.get_library(library_id)
+        if source_kind not in {"file", "url"}:
+            raise AppError("invalid_source_kind", "The source kind is invalid.")
+        if source_kind == "file" and origin_url is not None:
+            raise AppError("invalid_source_origin", "File sources cannot have an origin URL.")
+        if source_kind == "url" and not origin_url:
+            raise AppError("invalid_source_origin", "URL sources require an origin URL.")
         with self._lock:
             self._ensure_index_contract(library_id)
         safe_name = Path(filename.replace("\\", "/")).name
@@ -541,8 +563,8 @@ class LoreDockService:
                     """
                     INSERT INTO sources(
                         id, library_id, name, media_type, suffix, status, content_hash,
-                        size_bytes, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)
+                        size_bytes, source_kind, origin_url, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         source_id,
@@ -552,6 +574,8 @@ class LoreDockService:
                         suffix,
                         content_hash,
                         size,
+                        source_kind,
+                        origin_url,
                         now,
                         now,
                     ),
@@ -585,6 +609,21 @@ class LoreDockService:
                 )
             self._set_job(job_id, "succeeded", 1.0)
         return self.get_source(source_id), self.get_job(job_id), False
+
+    def import_url(self, library_id: str, url: str) -> tuple[SourceRecord, JobRecord, bool]:
+        self.get_library(library_id)
+        try:
+            snapshot = self.url_fetcher.fetch(url)
+        except WebFetchError as error:
+            raise AppError("url_fetch_failed", str(error), status_code=422) from error
+        return self.import_source(
+            library_id,
+            snapshot.filename,
+            snapshot.media_type,
+            BytesIO(snapshot.content),
+            source_kind="url",
+            origin_url=snapshot.final_url,
+        )
 
     def _set_source_status(self, source_id: str, status: str) -> None:
         with self.database.transaction() as connection:

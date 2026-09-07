@@ -23,6 +23,7 @@ from loredock.api.contracts import (
     SourceContentResponse,
     SourceImportResponse,
     SourceResponse,
+    UrlSourceCreate,
     VersionResponse,
 )
 from loredock.api.pagination import SourceCursor, decode_source_cursor, encode_source_cursor
@@ -199,6 +200,23 @@ def import_source(
         file.content_type,
         file.file,
     )
+    return SourceImportResponse(
+        source=SourceResponse.model_validate(source),
+        job=JobResponse.model_validate(job),
+        duplicate=duplicate,
+    )
+
+
+@router.post(
+    "/libraries/{library_id}/url-sources",
+    response_model=SourceImportResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["sources"],
+)
+def import_url_source(
+    library_id: str, payload: UrlSourceCreate, service: Service
+) -> SourceImportResponse:
+    source, job, duplicate = service.import_url(library_id, payload.url)
     return SourceImportResponse(
         source=SourceResponse.model_validate(source),
         job=JobResponse.model_validate(job),

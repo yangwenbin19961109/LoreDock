@@ -124,6 +124,8 @@ converted to inert UTF-8 text; script, style, template and embedded-frame conten
 repeated content hash within the same library returns the existing source and job with
 `duplicate: true`.
 
+`POST /api/v1/libraries/{library_id}/url-sources` accepts `{ "url": "https://..." }` and creates a bounded, one-time HTML or plain-text snapshot. The Core permits only public HTTP/HTTPS destinations on standard ports, pins the connection to a validated public DNS result, revalidates up to three redirects, rejects HTTPS downgrade, compressed or unsupported responses, and limits the decoded snapshot input to 10 MiB. URL sources expose additive `source_kind` and `origin_url` fields; file sources use `source_kind: "file"` and `origin_url: null`.
+
 ## Phase 2.5 search context fields
 
 Search keeps the Phase 2 `chunk_id`, `text`, `char_start`, and `char_end` fields as the precise

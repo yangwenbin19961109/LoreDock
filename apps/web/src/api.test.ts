@@ -138,6 +138,43 @@ describe('LoreDock Core API client', () => {
     )
   })
 
+  it('posts a URL for a bounded web snapshot', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ source: {}, job: {}, duplicate: false }), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await coreApi.importUrl('library-id' as LibraryId, 'https://example.com/guide')
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/libraries/library-id/url-sources', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: 'https://example.com/guide' })
+    })
+  })
+
+  it('forwards cancellation to a source upload', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ source: {}, job: {}, duplicate: false }), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const controller = new AbortController()
+    const file = new File(['正文'], 'note.md', { type: 'text/markdown' })
+
+    await coreApi.importSource('library-id' as LibraryId, file, controller.signal)
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/libraries/library-id/sources',
+      expect.objectContaining({ method: 'POST', signal: controller.signal })
+    )
+  })
+
   it('posts a bounded lexical search request', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ items: [] }), {

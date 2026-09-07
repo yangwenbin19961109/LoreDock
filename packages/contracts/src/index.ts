@@ -98,6 +98,8 @@ export interface Source {
   readonly status: string
   readonly content_hash: string
   readonly size_bytes: number
+  readonly source_kind?: 'file' | 'url'
+  readonly origin_url?: string | null
   readonly error: string | null
   readonly created_at: string
   readonly updated_at: string

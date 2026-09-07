@@ -568,7 +568,7 @@ h2 {
 }
 .import-progress {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(140px, 0.45fr) 24px;
+  grid-template-columns: minmax(0, 1fr) minmax(140px, 0.45fr) auto;
   align-items: center;
   gap: 14px;
   margin: -8px 0 18px;
@@ -601,9 +601,9 @@ h2 {
   accent-color: var(--ld-color-primary);
 }
 .import-progress button {
-  width: 24px;
+  min-width: 24px;
   height: 24px;
-  padding: 0;
+  padding: 0 6px;
   color: var(--ld-color-text-muted);
   background: transparent;
   border: 0;
@@ -614,9 +614,19 @@ h2 {
   color: var(--ld-color-text);
   background: color-mix(in srgb, var(--ld-color-text) 8%, transparent);
 }
+.import-progress-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
 .import-progress--failed {
   background: color-mix(in srgb, var(--ld-color-danger) 7%, var(--ld-color-surface));
   border-color: color-mix(in srgb, var(--ld-color-danger) 28%, var(--ld-color-border));
+}
+.import-progress--partial,
+.import-progress--canceled {
+  background: color-mix(in srgb, #d97706 7%, var(--ld-color-surface));
+  border-color: color-mix(in srgb, #d97706 28%, var(--ld-color-border));
 }
 .core-diagnostic {
   display: flex;
@@ -881,6 +891,12 @@ h2 {
   margin-bottom: 0;
   color: var(--ld-color-text-muted);
   font-size: 11px;
+}
+.panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
 }
 .drop-zone {
   display: grid;
@@ -1386,6 +1402,104 @@ h2 {
   border: 1px solid var(--ld-color-border);
   border-radius: 8px;
 }
+.folder-import-dialog {
+  width: min(620px, calc(100vw - 40px));
+}
+.folder-import-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin-top: 22px;
+  overflow: hidden;
+  background: var(--ld-color-border);
+  border: 1px solid var(--ld-color-border);
+  border-radius: 10px;
+}
+.folder-import-summary > div {
+  display: grid;
+  gap: 3px;
+  padding: 14px 16px;
+  background: var(--ld-color-surface-muted);
+}
+.folder-import-summary strong {
+  overflow: hidden;
+  color: var(--ld-color-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
+.folder-import-summary span,
+.folder-import-list-heading span {
+  color: var(--ld-color-text-muted);
+  font-size: 12px;
+}
+.folder-import-warning {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  color: var(--ld-color-danger) !important;
+  background: color-mix(in srgb, var(--ld-color-danger) 7%, var(--ld-color-surface));
+  border: 1px solid color-mix(in srgb, var(--ld-color-danger) 25%, var(--ld-color-border));
+  border-radius: 8px;
+}
+.folder-import-files,
+.folder-import-skipped {
+  margin-top: 18px;
+}
+.folder-import-list-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 7px;
+}
+.folder-import-files ul,
+.folder-import-skipped ul {
+  max-height: 210px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  border-block: 1px solid var(--ld-color-border);
+  list-style: none;
+}
+.folder-import-files li,
+.folder-import-skipped li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  padding: 8px 2px;
+  border-bottom: 1px solid color-mix(in srgb, var(--ld-color-border) 70%, transparent);
+  font-size: 12px;
+}
+.folder-import-files li:last-child,
+.folder-import-skipped li:last-child {
+  border-bottom: 0;
+}
+.folder-import-files li span,
+.folder-import-skipped li span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.folder-import-files small,
+.folder-import-skipped small,
+.folder-import-files > p,
+.folder-import-skipped > p {
+  color: var(--ld-color-text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.folder-import-files > p,
+.folder-import-skipped > p {
+  margin: 8px 0 0;
+}
+.folder-import-skipped summary {
+  color: var(--ld-color-text-muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+.folder-import-skipped[open] summary {
+  margin-bottom: 8px;
+}
 .setting-note {
   margin: 14px 0 0;
   color: var(--ld-color-text-muted);
@@ -1523,6 +1637,9 @@ h2 {
 }
 [data-theme='dark'] .onboarding-features span {
   background: var(--ld-color-primary-soft);
+}
+[data-theme='dark'] .folder-import-summary > div {
+  background: var(--ld-color-surface-muted);
 }
 [data-theme='dark'] .document-preview mark {
   color: #172033;

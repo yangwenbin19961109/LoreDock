@@ -63,8 +63,12 @@ def test_recent_history_cap_does_not_remove_favorites(tmp_path: Path) -> None:
             identifier = f"fixture-{index}"
             with core.database.transaction() as db:
                 db.execute(
-                    "INSERT INTO sources SELECT ?, library_id, name, media_type, suffix, "
-                    "status, ?, size_bytes, error, created_at, updated_at FROM sources WHERE id=?",
+                    "INSERT INTO sources("
+                    "id, library_id, name, media_type, suffix, status, content_hash, "
+                    "size_bytes, source_kind, origin_url, error, created_at, updated_at) "
+                    "SELECT ?, library_id, name, media_type, suffix, status, ?, size_bytes, "
+                    "source_kind, origin_url, error, created_at, updated_at "
+                    "FROM sources WHERE id=?",
                     (identifier, identifier, source.id),
                 )
             core.record_source_visit(identifier)
@@ -77,7 +81,7 @@ def test_recent_history_cap_does_not_remove_favorites(tmp_path: Path) -> None:
         core.close()
 
 
-def test_v4_to_v5_retry_preserves_metadata(tmp_path: Path) -> None:
+def test_v4_to_latest_retry_preserves_metadata(tmp_path: Path) -> None:
     path = tmp_path / "app.sqlite"
     db = AppDatabase(path)
     db.connection.execute("INSERT INTO libraries VALUES ('fixture', 'Keep', 'date', 'date')")
@@ -87,7 +91,7 @@ def test_v4_to_v5_retry_preserves_metadata(tmp_path: Path) -> None:
     db.close()
     for _ in range(2):
         db = AppDatabase(path)
-        assert db.connection.execute("PRAGMA user_version").fetchone()[0] == 5
+        assert db.connection.execute("PRAGMA user_version").fetchone()[0] == 6
         assert db.connection.execute("SELECT name FROM libraries").fetchone()[0] == "Keep"
         assert db.connection.execute("PRAGMA foreign_key_check").fetchall() == []
         with pytest.raises(sqlite3.IntegrityError), db.transaction() as conn:

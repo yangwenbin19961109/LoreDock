@@ -10,6 +10,7 @@ import pytest
 
 from loredock.application import LoreDockService
 from loredock.application import service as service_module
+from loredock.ingestion.web import UrlFetcher, WebResponse
 
 
 def _pptx_bytes() -> bytes:
@@ -73,6 +74,19 @@ def _xlsx_bytes() -> bytes:
             </worksheet>""",
         )
     return payload.getvalue()
+
+
+def _fixture_url_fetcher() -> UrlFetcher:
+    return UrlFetcher(
+        resolver=lambda _hostname, _port: ("93.184.216.34",),
+        transport=lambda _url, _address, _limit: WebResponse(
+            200,
+            {"content-type": "text/html; charset=utf-8"},
+            b"<html><head><title>Saved page</title></head>"
+            b"<body><main>durable web snapshot citation</main>"
+            b"<script>untrusted()</script></body></html>",
+        ),
+    )
 
 
 def test_library_source_search_read_delete_round_trip(tmp_path: Path) -> None:
@@ -213,6 +227,26 @@ def test_xlsx_source_is_imported_indexed_and_read_with_sheet_metadata(tmp_path: 
     content = service.read_source(source.id)
     assert "# 工作表 1: Knowledge" in content.text
     assert "A1: grounded spreadsheet citation" in content.text
+    service.close()
+
+
+def test_url_source_is_snapshotted_indexed_and_records_final_origin(tmp_path: Path) -> None:
+    service = LoreDockService(tmp_path, url_fetcher=_fixture_url_fetcher())
+    library = service.create_library("Web")
+
+    source, job, duplicate = service.import_url(library.id, "https://example.com/guide")
+
+    assert source.status == "ready"
+    assert source.source_kind == "url"
+    assert source.origin_url == "https://example.com/guide"
+    assert source.name == "guide.html"
+    assert job.status == "succeeded"
+    assert duplicate is False
+    result = service.search(library.id, "snapshot citation", lexical_only=True)[0]
+    assert result.source_id == source.id
+    content = service.read_source(source.id).text
+    assert "durable web snapshot citation" in content
+    assert "untrusted" not in content
     service.close()
 
 

@@ -69,7 +69,7 @@ test('shows honest import progress until Core finishes processing', async ({ pag
   })
 
   await page.goto('/')
-  await page.locator('input[type="file"]').setInputFiles({
+  await page.locator('input[type="file"]:not([webkitdirectory])').setInputFiles({
     name: source.name,
     mimeType: source.media_type,
     buffer: Buffer.from('<p>资料内容</p>')

@@ -14,7 +14,7 @@ def test_migration_is_retry_safe(tmp_path: Path) -> None:
     version = second.connection.execute("PRAGMA user_version").fetchone()[0]
     second.close()
 
-    assert version == 5
+    assert version == 6
 
 
 def test_settings_migration_has_safe_defaults(tmp_path: Path) -> None:
@@ -30,18 +30,62 @@ def test_settings_migration_has_safe_defaults(tmp_path: Path) -> None:
 
 def test_schema_two_migrates_to_settings_without_reset(tmp_path: Path) -> None:
     path = tmp_path / "app.sqlite"
-    connection = sqlite3.connect(path)
-    connection.execute("PRAGMA user_version=2")
-    connection.close()
+    fixture = AppDatabase(path)
+    fixture.connection.execute("DROP TABLE source_activity")
+    fixture.connection.execute("DROP TABLE model_jobs")
+    fixture.connection.execute("DROP TABLE app_settings")
+    fixture.connection.execute("PRAGMA user_version=2")
+    fixture.connection.commit()
+    fixture.close()
 
     database = AppDatabase(path)
     version = database.connection.execute("PRAGMA user_version").fetchone()[0]
     settings = database.connection.execute("SELECT theme FROM app_settings WHERE id=1").fetchone()
     database.close()
 
-    assert version == 5
+    assert version == 6
     assert settings is not None
     assert settings["theme"] == "system"
+
+
+def test_schema_five_adds_source_origin_without_changing_existing_rows(tmp_path: Path) -> None:
+    path = tmp_path / "app.sqlite"
+    connection = sqlite3.connect(path)
+    connection.executescript(
+        """
+        CREATE TABLE libraries (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE TABLE sources (
+            id TEXT PRIMARY KEY,
+            library_id TEXT NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+            name TEXT NOT NULL, media_type TEXT NOT NULL, suffix TEXT NOT NULL,
+            status TEXT NOT NULL, content_hash TEXT NOT NULL, size_bytes INTEGER NOT NULL,
+            error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+            UNIQUE(library_id, content_hash)
+        );
+        INSERT INTO libraries VALUES ('lib', 'Keep', 'date', 'date');
+        INSERT INTO sources VALUES (
+            'source', 'lib', 'guide.md', 'text/markdown', '.md', 'ready',
+            'hash', 12, NULL, 'date', 'date'
+        );
+        PRAGMA user_version=5;
+        """
+    )
+    connection.close()
+
+    database = AppDatabase(path)
+    row = database.connection.execute(
+        "SELECT source_kind, origin_url, name FROM sources WHERE id='source'"
+    ).fetchone()
+
+    assert database.connection.execute("PRAGMA user_version").fetchone()[0] == 6
+    assert row is not None
+    assert tuple(row) == ("file", None, "guide.md")
+    database.close()
 
 
 def test_running_model_job_is_recovered_as_pending(tmp_path: Path) -> None:

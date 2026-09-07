@@ -25,6 +25,7 @@ import { SourceCollection } from './SourceCollection'
 import { FavoriteButton } from './FavoriteButton'
 import { activityApi, type CollectionKind } from './activityApi'
 import { desktopCoreStatus, restartDesktopCore, type DesktopCoreStatus } from './runtime'
+import { planFolderImport, type FolderImportPlan } from './folderImport'
 
 type CoreState = 'checking' | 'ready' | 'recovering' | 'failed' | 'offline'
 type DetailTab = 'preview' | 'details'
@@ -34,7 +35,11 @@ interface ImportProgressState {
   readonly total: number
   readonly completed: number
   readonly currentName: string
-  readonly status: 'running' | 'succeeded' | 'failed'
+  readonly status: 'running' | 'succeeded' | 'partial' | 'failed' | 'canceled'
+  readonly succeeded?: number
+  readonly duplicates?: number
+  readonly failed?: number
+  readonly skipped?: number
 }
 
 const SOURCE_PAGE_SIZE = 10
@@ -90,6 +95,9 @@ export function App() {
   const [previewRequestRevision, setPreviewRequestRevision] = useState(0)
   const [detailTab, setDetailTab] = useState<DetailTab>('preview')
   const [showCreate, setShowCreate] = useState(false)
+  const [showUrlImport, setShowUrlImport] = useState(false)
+  const [folderPlan, setFolderPlan] = useState<FolderImportPlan>()
+  const [folderRetryPlan, setFolderRetryPlan] = useState<FolderImportPlan>()
   const [showRename, setShowRename] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showAgents, setShowAgents] = useState(false)
@@ -98,6 +106,7 @@ export function App() {
   const [modelStatus, setModelStatus] = useState<ModelStatus>()
   const [modelJob, setModelJob] = useState<ModelJob | null>(null)
   const [libraryName, setLibraryName] = useState('')
+  const [sourceUrl, setSourceUrl] = useState('')
   const [renameName, setRenameName] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>()
   const [busy, setBusy] = useState(false)
@@ -111,6 +120,8 @@ export function App() {
   const [draggingFiles, setDraggingFiles] = useState(false)
   const [error, setError] = useState<string>()
   const fileInput = useRef<HTMLInputElement>(null)
+  const folderInput = useRef<HTMLInputElement>(null)
+  const folderImportController = useRef<AbortController | undefined>(undefined)
   const dragDepth = useRef(0)
   const previousDesktopCoreState = useRef<string | undefined>(undefined)
 
@@ -527,6 +538,165 @@ export function App() {
     }
   }
 
+  function prepareFolderImport(files: FileList | null): void {
+    if (!files?.length) return
+    setError(undefined)
+    setFolderPlan(planFolderImport(Array.from(files)))
+    if (folderInput.current) folderInput.current.value = ''
+  }
+
+  function cancelFolderImport(): void {
+    folderImportController.current?.abort()
+  }
+
+  async function importFolder(planOverride?: FolderImportPlan): Promise<void> {
+    const plan = planOverride ?? folderPlan
+    if (!selectedId || !plan || plan.blockedReason || plan.files.length === 0) return
+    const controller = new AbortController()
+    folderImportController.current = controller
+    setFolderPlan(undefined)
+    setFolderRetryPlan(undefined)
+    setBusy(true)
+    setError(undefined)
+    let succeeded = 0
+    let duplicates = 0
+    let failed = 0
+    const imported: SourceImportResponse[] = []
+    const failedFiles: FolderImportPlan['files'][number][] = []
+    setImportProgress({
+      total: plan.files.length,
+      completed: 0,
+      currentName: plan.files[0]?.relativePath ?? plan.folderName,
+      status: 'running',
+      skipped: plan.skipped.length
+    })
+
+    for (const [index, item] of plan.files.entries()) {
+      if (controller.signal.aborted) break
+      setImportProgress({
+        total: plan.files.length,
+        completed: index,
+        currentName: item.relativePath,
+        status: 'running',
+        succeeded,
+        duplicates,
+        failed,
+        skipped: plan.skipped.length
+      })
+      try {
+        const result = await coreApi.importSource(selectedId, item.file, controller.signal)
+        imported.push(result)
+        if (result.duplicate) duplicates += 1
+        else succeeded += 1
+      } catch {
+        if (controller.signal.aborted) break
+        failed += 1
+        failedFiles.push(item)
+      }
+      setImportProgress({
+        total: plan.files.length,
+        completed: index + 1,
+        currentName: item.relativePath,
+        status: 'running',
+        succeeded,
+        duplicates,
+        failed,
+        skipped: plan.skipped.length
+      })
+    }
+
+    const canceled = controller.signal.aborted
+    const completed = succeeded + duplicates + failed
+    const remainingFiles = canceled ? plan.files.slice(completed) : []
+    const retryFiles = [...failedFiles, ...remainingFiles]
+    if (retryFiles.length > 0) {
+      setFolderRetryPlan({
+        folderName: plan.folderName,
+        files: retryFiles,
+        skipped: [],
+        totalBytes: retryFiles.reduce((sum, item) => sum + item.file.size, 0)
+      })
+    }
+    const finalStatus = canceled
+      ? 'canceled'
+      : failed > 0
+        ? succeeded + duplicates > 0
+          ? 'partial'
+          : 'failed'
+        : 'succeeded'
+    setImportProgress({
+      total: plan.files.length,
+      completed,
+      currentName: plan.folderName,
+      status: finalStatus,
+      succeeded,
+      duplicates,
+      failed,
+      skipped: plan.skipped.length
+    })
+    folderImportController.current = undefined
+
+    try {
+      if (imported.length > 0) {
+        setJobs((current) => {
+          const next = { ...current }
+          for (const item of imported) next[item.source.id] = item.job
+          return next
+        })
+      }
+      const page = await coreApi.listSources(selectedId, { limit: SOURCE_PAGE_SIZE })
+      setSources(page.items)
+      setSourceFilter('')
+      setSourceSort('updated-desc')
+      setSourceCursor(undefined)
+      setSourceCursorHistory([])
+      setNextSourceCursor(page.page.next_cursor ?? undefined)
+      const firstSourceId = imported[0]?.source.id ?? page.items[0]?.id
+      if (firstSourceId) selectSource(firstSourceId)
+      if (failed > 0) {
+        setError(`${failed} 份资料导入失败，其余资料已保留。可以检查文件后单独重试。`)
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '资料列表刷新失败。')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function importUrl(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault()
+    const url = sourceUrl.trim()
+    if (!selectedId || !url) return
+    setBusy(true)
+    setError(undefined)
+    setImportProgress({ total: 1, completed: 0, currentName: url, status: 'running' })
+    try {
+      const imported = await coreApi.importUrl(selectedId, url)
+      setJobs((current) => ({ ...current, [imported.source.id]: imported.job }))
+      const page = await coreApi.listSources(selectedId, { limit: SOURCE_PAGE_SIZE })
+      setSources(page.items)
+      setSourceFilter('')
+      setSourceSort('updated-desc')
+      setSourceCursor(undefined)
+      setSourceCursorHistory([])
+      setNextSourceCursor(page.page.next_cursor ?? undefined)
+      setImportProgress({
+        total: 1,
+        completed: 1,
+        currentName: imported.source.name,
+        status: 'succeeded'
+      })
+      setSourceUrl('')
+      setShowUrlImport(false)
+      selectSource(imported.source.id)
+    } catch (reason) {
+      setImportProgress((current) => (current ? { ...current, status: 'failed' } : current))
+      setError(reason instanceof Error ? reason.message : '网页导入失败。')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function search(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
     const normalizedQuery = query.trim()
@@ -788,20 +958,6 @@ export function App() {
               <Button variant="secondary" onClick={() => setShowCreate(true)} disabled={busy}>
                 创建知识库
               </Button>
-              <Button
-                onClick={() => fileInput.current?.click()}
-                disabled={!selectedLibrary || busy}
-              >
-                {busy ? '正在处理…' : '添加资料'}
-              </Button>
-              <input
-                ref={fileInput}
-                className="visually-hidden"
-                type="file"
-                multiple
-                accept=".md,.markdown,.txt,.pdf,.docx,.pptx,.xlsx,.htm,.html"
-                onChange={(event) => void importFiles(event.target.files)}
-              />
             </div>
           </header>
           {error && (
@@ -825,9 +981,19 @@ export function App() {
                     ? `正在处理 ${importProgress.completed + 1}/${importProgress.total}`
                     : importProgress.status === 'succeeded'
                       ? `已完成 ${importProgress.completed}/${importProgress.total}`
-                      : `导入停在 ${Math.min(importProgress.completed + 1, importProgress.total)}/${importProgress.total}`}
+                      : importProgress.status === 'partial'
+                        ? `已处理 ${importProgress.completed}/${importProgress.total}`
+                        : importProgress.status === 'canceled'
+                          ? `已取消，完成 ${importProgress.completed}/${importProgress.total}`
+                          : `导入失败 ${importProgress.completed}/${importProgress.total}`}
                 </strong>
-                <span title={importProgress.currentName}>{importProgress.currentName}</span>
+                <span title={importProgress.currentName}>
+                  {importProgress.status === 'running'
+                    ? importProgress.currentName
+                    : importProgress.succeeded === undefined
+                      ? importProgress.currentName
+                      : `新增 ${importProgress.succeeded} · 已存在 ${importProgress.duplicates ?? 0} · 失败 ${importProgress.failed ?? 0} · 跳过 ${importProgress.skipped ?? 0}`}
+                </span>
               </div>
               <progress
                 {...(importProgress.status === 'running' && importProgress.total === 1
@@ -836,15 +1002,29 @@ export function App() {
                 max={importProgress.total}
                 aria-label={`已完成 ${importProgress.completed}，共 ${importProgress.total} 份资料`}
               />
-              {importProgress.status !== 'running' && (
-                <button
-                  type="button"
-                  onClick={() => setImportProgress(undefined)}
-                  aria-label="关闭导入进度"
-                >
-                  ×
+              {importProgress.status === 'running' && folderImportController.current ? (
+                <button type="button" onClick={cancelFolderImport} aria-label="取消文件夹导入">
+                  停止
                 </button>
-              )}
+              ) : importProgress.status !== 'running' ? (
+                <div className="import-progress-actions">
+                  {folderRetryPlan && (
+                    <button type="button" onClick={() => void importFolder(folderRetryPlan)}>
+                      {importProgress.status === 'canceled' ? '继续' : '重试'}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImportProgress(undefined)
+                      setFolderRetryPlan(undefined)
+                    }}
+                    aria-label="关闭导入进度"
+                  >
+                    ×
+                  </button>
+                </div>
+              ) : null}
             </section>
           )}
           {(coreState === 'recovering' || coreState === 'failed') && coreDiagnostic && (
@@ -997,13 +1177,48 @@ export function App() {
                             : `第 ${sourcePage} 页，共 ${sources.length} 份资料`}
                       </p>
                     </div>
-                    <Button
-                      variant="secondary"
-                      onClick={() => fileInput.current?.click()}
-                      disabled={busy}
-                    >
-                      ＋ 添加资料
-                    </Button>
+                    <div className="panel-actions">
+                      <Button
+                        variant="ghost"
+                        onClick={() => setShowUrlImport(true)}
+                        disabled={busy}
+                      >
+                        从网页导入
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => fileInput.current?.click()}
+                        disabled={busy}
+                      >
+                        添加本地资料
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => folderInput.current?.click()}
+                        disabled={busy}
+                      >
+                        导入文件夹
+                      </Button>
+                      <input
+                        ref={fileInput}
+                        className="visually-hidden"
+                        type="file"
+                        multiple
+                        accept=".md,.markdown,.txt,.pdf,.docx,.pptx,.xlsx,.htm,.html"
+                        onChange={(event) => void importFiles(event.target.files)}
+                      />
+                      <input
+                        ref={(node) => {
+                          folderInput.current = node
+                          node?.setAttribute('webkitdirectory', '')
+                        }}
+                        className="visually-hidden"
+                        type="file"
+                        multiple
+                        accept=".md,.markdown,.txt,.pdf,.docx,.pptx,.xlsx,.htm,.html"
+                        onChange={(event) => prepareFolderImport(event.target.files)}
+                      />
+                    </div>
                   </div>
                   {sources.length === 0 ? (
                     <button
@@ -1222,6 +1437,12 @@ export function App() {
                           <dt>来源 ID</dt>
                           <dd className="mono">{selectedSource.id}</dd>
                         </div>
+                        {selectedSource.origin_url && (
+                          <div>
+                            <dt>网页来源</dt>
+                            <dd className="mono source-origin">{selectedSource.origin_url}</dd>
+                          </div>
+                        )}
                         {highlightRange && (
                           <div>
                             <dt>当前引用</dt>
@@ -1420,6 +1641,128 @@ export function App() {
               </Button>
             </div>
           </form>
+        </div>
+      )}
+
+      {showUrlImport && selectedLibrary && (
+        <div
+          className="dialog-backdrop"
+          role="presentation"
+          onMouseDown={() => setShowUrlImport(false)}
+        >
+          <form
+            className="dialog"
+            aria-labelledby="import-url-title"
+            onSubmit={(event) => void importUrl(event)}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <p className="eyebrow">保存网页快照</p>
+            <h2 id="import-url-title">从网址导入</h2>
+            <p>LoreDock 会保存当前网页的安全文本快照。不会登录网站、执行脚本或持续同步页面。</p>
+            <label htmlFor="source-url">网页地址</label>
+            <input
+              id="source-url"
+              type="url"
+              inputMode="url"
+              autoFocus
+              maxLength={2048}
+              value={sourceUrl}
+              onChange={(event) => setSourceUrl(event.target.value)}
+              placeholder="https://example.com/article"
+            />
+            <p className="setting-note">仅支持公开的 HTTP/HTTPS 网页，不支持本机或内网地址。</p>
+            <div className="dialog-actions">
+              <Button type="button" variant="ghost" onClick={() => setShowUrlImport(false)}>
+                取消
+              </Button>
+              <Button type="submit" disabled={!sourceUrl.trim() || busy}>
+                {busy ? '正在导入…' : '导入网页'}
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {folderPlan && selectedLibrary && (
+        <div
+          className="dialog-backdrop"
+          role="presentation"
+          onMouseDown={() => setFolderPlan(undefined)}
+        >
+          <section
+            className="dialog folder-import-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="folder-import-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <h2 id="folder-import-title">导入“{folderPlan.folderName}”</h2>
+            <p>确认后会按文件逐份导入。文件夹本身不会被持续监控，原始文件也不会被修改。</p>
+            <div className="folder-import-summary" aria-label="文件夹扫描结果">
+              <div>
+                <strong>{folderPlan.files.length}</strong>
+                <span>可导入</span>
+              </div>
+              <div>
+                <strong>{folderPlan.skipped.length}</strong>
+                <span>将跳过</span>
+              </div>
+              <div>
+                <strong>{formatBytes(folderPlan.totalBytes)}</strong>
+                <span>导入体积</span>
+              </div>
+            </div>
+            {folderPlan.blockedReason && (
+              <p className="folder-import-warning" role="alert">
+                {folderPlan.blockedReason}
+              </p>
+            )}
+            {folderPlan.files.length > 0 && (
+              <div className="folder-import-files">
+                <div className="folder-import-list-heading">
+                  <strong>待导入资料</strong>
+                  <span>按路径顺序</span>
+                </div>
+                <ul>
+                  {folderPlan.files.slice(0, 8).map((item) => (
+                    <li key={item.relativePath}>
+                      <span title={item.relativePath}>{item.relativePath}</span>
+                      <small>{formatBytes(item.file.size)}</small>
+                    </li>
+                  ))}
+                </ul>
+                {folderPlan.files.length > 8 && <p>另有 {folderPlan.files.length - 8} 份资料</p>}
+              </div>
+            )}
+            {folderPlan.skipped.length > 0 && (
+              <details className="folder-import-skipped">
+                <summary>查看跳过的 {folderPlan.skipped.length} 个文件</summary>
+                <ul>
+                  {folderPlan.skipped.slice(0, 20).map((item) => (
+                    <li key={item.relativePath}>
+                      <span title={item.relativePath}>{item.relativePath}</span>
+                      <small>{item.reason === 'too-large' ? '超过 100 MiB' : '格式不支持'}</small>
+                    </li>
+                  ))}
+                </ul>
+                {folderPlan.skipped.length > 20 && (
+                  <p>另有 {folderPlan.skipped.length - 20} 个文件</p>
+                )}
+              </details>
+            )}
+            <div className="dialog-actions">
+              <Button type="button" variant="ghost" onClick={() => setFolderPlan(undefined)}>
+                取消
+              </Button>
+              <Button
+                type="button"
+                onClick={() => void importFolder()}
+                disabled={Boolean(folderPlan.blockedReason) || folderPlan.files.length === 0}
+              >
+                导入 {folderPlan.files.length} 份资料
+              </Button>
+            </div>
+          </section>
         </div>
       )}
 

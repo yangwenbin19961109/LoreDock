@@ -144,12 +144,25 @@ export const coreApi = {
     return request<Page<Source>>(`libraries/${libraryId}/sources${query}`, { signal })
   },
 
-  importSource(libraryId: LibraryId, file: File): Promise<SourceImportResponse> {
+  importSource(
+    libraryId: LibraryId,
+    file: File,
+    signal?: AbortSignal
+  ): Promise<SourceImportResponse> {
     const body = new FormData()
     body.append('file', file)
     return request<SourceImportResponse>(`libraries/${libraryId}/sources`, {
       method: 'POST',
-      body
+      body,
+      signal
+    })
+  },
+
+  importUrl(libraryId: LibraryId, url: string): Promise<SourceImportResponse> {
+    return request<SourceImportResponse>(`libraries/${libraryId}/url-sources`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url })
     })
   },
 

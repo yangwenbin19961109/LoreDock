@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 
 def utc_timestamp() -> str:
@@ -143,6 +143,20 @@ class AppDatabase:
                     "ON source_activity(favorite_at DESC, source_id)"
                 )
                 self.connection.execute("PRAGMA user_version=5")
+
+        if version < 6:
+            with self.connection:
+                source_columns = {
+                    str(row[1]) for row in self.connection.execute("PRAGMA table_info(sources)")
+                }
+                if "source_kind" not in source_columns:
+                    self.connection.execute(
+                        "ALTER TABLE sources ADD COLUMN source_kind TEXT NOT NULL DEFAULT 'file' "
+                        "CHECK (source_kind IN ('file', 'url'))"
+                    )
+                if "origin_url" not in source_columns:
+                    self.connection.execute("ALTER TABLE sources ADD COLUMN origin_url TEXT")
+                self.connection.execute("PRAGMA user_version=6")
 
     def recover_model_jobs(self) -> int:
         with self.connection:

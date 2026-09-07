@@ -56,6 +56,8 @@ class SourceRecord:
     status: str
     content_hash: str
     size_bytes: int
+    source_kind: Literal["file", "url"]
+    origin_url: str | None
     error: str | None
     created_at: str
     updated_at: str

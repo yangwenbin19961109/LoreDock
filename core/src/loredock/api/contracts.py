@@ -110,6 +110,8 @@ class SourceResponse(ApiModel):
     status: str
     content_hash: str
     size_bytes: int
+    source_kind: Literal["file", "url"]
+    origin_url: str | None
     error: str | None
     created_at: str
     updated_at: str
@@ -132,6 +134,10 @@ class SourceImportResponse(ApiModel):
     source: SourceResponse
     job: JobResponse
     duplicate: bool
+
+
+class UrlSourceCreate(ApiModel):
+    url: str = Field(min_length=1, max_length=2048)
 
 
 class SearchRequest(ApiModel):

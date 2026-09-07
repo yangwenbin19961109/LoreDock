@@ -8,6 +8,7 @@ from httpx import Response
 
 from loredock.app import create_app
 from loredock.application import LoreDockService
+from loredock.ingestion.web import UrlFetcher, WebResponse
 
 
 class HttpClient(Protocol):
@@ -46,6 +47,17 @@ def _xlsx_upload() -> bytes:
             </worksheet>""",
         )
     return payload.getvalue()
+
+
+def _url_fetcher() -> UrlFetcher:
+    return UrlFetcher(
+        resolver=lambda _hostname, _port: ("93.184.216.34",),
+        transport=lambda _url, _address, _limit: WebResponse(
+            200,
+            {"content-type": "text/html"},
+            b"<main>HTTP imported web knowledge</main>",
+        ),
+    )
 
 
 def test_http_api_completes_knowledge_round_trip(tmp_path: Path) -> None:
@@ -153,4 +165,25 @@ def test_http_api_accepts_xlsx_with_sheet_and_cell_reference(tmp_path: Path) -> 
     content = client.get(f"/api/v1/sources/{source_id}/content").json()["text"]
     assert "# 工作表 1: API" in content
     assert "C7: HTTP spreadsheet reference" in content
+    service.close()
+
+
+def test_http_api_imports_bounded_url_snapshot(tmp_path: Path) -> None:
+    service = LoreDockService(tmp_path, url_fetcher=_url_fetcher())
+    app = create_app(data_dir=tmp_path)
+    app.state.service = service
+    client = cast(HttpClient, TestClient(app))
+    library_id = str(client.post("/api/v1/libraries", json={"name": "Web"}).json()["id"])
+
+    imported = client.post(
+        f"/api/v1/libraries/{library_id}/url-sources",
+        json={"url": "https://example.com/reference"},
+    )
+
+    assert imported.status_code == 201
+    source = imported.json()["source"]
+    assert source["source_kind"] == "url"
+    assert source["origin_url"] == "https://example.com/reference"
+    content = client.get(f"/api/v1/sources/{source['id']}/content")
+    assert content.json()["text"] == "HTTP imported web knowledge"
     service.close()

@@ -72,6 +72,7 @@ export function App() {
   const [sourceFilter, setSourceFilter] = useState('')
   const [sourceSort, setSourceSort] = useState<SourceSort>('updated-desc')
   const [sourceCursor, setSourceCursor] = useState<string>()
+  const [sourceListRevision, setSourceListRevision] = useState(0)
   const [sourceCursorHistory, setSourceCursorHistory] = useState<readonly string[]>([])
   const [nextSourceCursor, setNextSourceCursor] = useState<string>()
   const [jobs, setJobs] = useState<Readonly<Record<string, Job>>>({})
@@ -266,7 +267,7 @@ export function App() {
         setError(reason instanceof Error ? reason.message : '资料列表加载失败。')
       })
     return () => controller.abort()
-  }, [selectedId, sourceCursor, sourceFilter, sourceSort])
+  }, [selectedId, sourceCursor, sourceFilter, sourceSort, sourceListRevision])
 
   useEffect(() => {
     if (!selectedSourceId) return
@@ -319,6 +320,8 @@ export function App() {
     setSourceCursorHistory([])
     setNextSourceCursor(undefined)
     setSelectedId(libraryId)
+    // Returning to the already-active library must reload after another view cleared the list.
+    setSourceListRevision((revision) => revision + 1)
   }
 
   function selectSource(sourceId: SourceId, range?: CitationRange): void {
@@ -1052,9 +1055,14 @@ export function App() {
                           </span>
                         </div>
                       </div>
+                    </div>
+                    <div className="detail-actions" aria-label="资料操作">
+                      <FavoriteButton key={selectedSource.id} sourceId={selectedSource.id} />
                       <button
-                        className="detail-delete"
+                        className="detail-icon-button detail-delete"
                         type="button"
+                        aria-label="删除资料"
+                        title="删除资料"
                         onClick={() =>
                           setDeleteTarget({
                             kind: 'source',
@@ -1064,10 +1072,11 @@ export function App() {
                         }
                         disabled={busy}
                       >
-                        删除资料
+                        <svg aria-hidden="true" viewBox="0 0 24 24">
+                          <path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v5m4-5v5" />
+                        </svg>
                       </button>
                     </div>
-                    <FavoriteButton key={selectedSource.id} sourceId={selectedSource.id} />
                     <div className="detail-tabs">
                       <button
                         className={detailTab === 'preview' ? 'active' : ''}

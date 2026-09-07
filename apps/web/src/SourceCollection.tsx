@@ -109,7 +109,7 @@ export function SourceCollection({
       </p>
       {error && <p role="alert">{error}</p>}
       <div className="collection-columns">
-        <section aria-label="资料列表">
+        <section className="collection-list-pane" aria-label="资料列表">
           {busy && <p role="status">正在读取列表…</p>}
           {!busy && !error && !items.length && (
             <p>
@@ -140,7 +140,7 @@ export function SourceCollection({
             </Button>
           )}
         </section>
-        <section aria-label="资料预览">
+        <section className="collection-preview-pane" aria-label="资料预览">
           {selected ? (
             <>
               <h2>{selected.name}</h2>

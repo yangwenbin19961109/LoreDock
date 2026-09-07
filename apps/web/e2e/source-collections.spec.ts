@@ -63,6 +63,11 @@ for (const theme of ['light', 'dark']) {
     await page.getByRole('button', { name: '收藏资料', exact: true }).click()
     await expect(page.getByRole('button', { name: '取消收藏', exact: true })).toBeVisible()
     await page.getByRole('button', { name: '收藏', exact: true }).click()
+    const listSurfaceContrast = await page.locator('.collection-list-pane').evaluate((element) => {
+      const pageBackground = getComputedStyle(element.closest('.collection-area')!).backgroundColor
+      return getComputedStyle(element).backgroundColor !== pageBackground
+    })
+    expect(listSurfaceContrast).toBe(true)
     await page.getByRole('button', { name: /知识库设计与开发文档/ }).click()
     await expect(page.locator('.collection-preview')).toContainText('安全的资料预览')
     await expect.poll(() => visits).toBe(2)
@@ -72,6 +77,16 @@ for (const theme of ['light', 'dark']) {
         .locator('.collection-area')
         .evaluate((element) => element.scrollWidth > element.clientWidth)
     ).toBe(false)
+    await page
+      .getByRole('button', { name: /测试知识库/ })
+      .first()
+      .click()
+    await expect(page.locator('button.source-row')).toHaveCount(1)
+    await expect(page.locator('button.source-row').first()).toContainText(source.name)
+    await expect(page.locator('.detail-actions').getByRole('button')).toHaveCount(2)
+    await expect(page.getByRole('button', { name: '删除资料', exact: true })).toBeVisible()
+    await page.getByRole('button', { name: '收藏', exact: true }).click()
+    await page.getByRole('button', { name: /知识库设计与开发文档/ }).click()
     await page.getByRole('button', { name: '取消收藏', exact: true }).click()
     await expect(page.getByText('还没有收藏。请在资料预览中点击“收藏资料”。')).toBeVisible()
     await page.getByRole('button', { name: '最近使用', exact: true }).click()

@@ -42,11 +42,16 @@ export function FavoriteButton({
     <div className="favorite-action">
       <Button
         variant="ghost"
+        className="favorite-star"
         disabled={busy || favorite === undefined}
         aria-pressed={favorite ?? false}
+        aria-label={busy ? '正在保存收藏' : favorite ? '取消收藏' : '收藏资料'}
+        title={favorite ? '取消收藏' : '收藏资料'}
         onClick={() => void toggle()}
       >
-        {busy ? '正在保存…' : favorite ? '取消收藏' : '收藏资料'}
+        <svg aria-hidden="true" viewBox="0 0 24 24">
+          <path d="m12 2.75 2.8 5.68 6.27.91-4.54 4.43 1.07 6.25L12 17.07l-5.6 2.95 1.07-6.25-4.54-4.43 6.27-.91L12 2.75Z" />
+        </svg>
       </Button>
       {error && (
         <>

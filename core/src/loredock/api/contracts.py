@@ -26,6 +26,8 @@ class VersionResponse(ApiModel):
     product: Literal["LoreDock"] = "LoreDock"
     core_version: str
     api_version: str
+    app_schema_version: int
+    index_schema_version: int
 
 
 class AppSettingsResponse(ApiModel):

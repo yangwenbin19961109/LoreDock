@@ -20,6 +20,9 @@ use uuid::Uuid;
 const CORE_START_TIMEOUT: Duration = Duration::from_secs(15);
 const CORE_STOP_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_AUTOMATIC_RESTARTS: u8 = 3;
+const EXPECTED_API_VERSION: &str = "v1";
+const EXPECTED_APP_SCHEMA_VERSION: u32 = 7;
+const EXPECTED_INDEX_SCHEMA_VERSION: u32 = 3;
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -31,7 +34,28 @@ struct CoreConnection {
 
 #[derive(Deserialize)]
 struct VersionResponse {
+    core_version: String,
     api_version: String,
+    app_schema_version: u32,
+    index_schema_version: u32,
+}
+
+fn validate_core_version(version: &VersionResponse) -> Result<(), String> {
+    if version.api_version != EXPECTED_API_VERSION
+        || version.core_version != env!("CARGO_PKG_VERSION")
+        || version.app_schema_version != EXPECTED_APP_SCHEMA_VERSION
+        || version.index_schema_version != EXPECTED_INDEX_SCHEMA_VERSION
+    {
+        return Err(format!(
+            "桌面端与 Core 版本不兼容（桌面端 {}，Core {}，API {}，数据库 {}，索引 {}）。",
+            env!("CARGO_PKG_VERSION"),
+            version.core_version,
+            version.api_version,
+            version.app_schema_version,
+            version.index_schema_version
+        ));
+    }
+    Ok(())
 }
 
 #[derive(Clone, Copy, PartialEq, Serialize)]
@@ -202,9 +226,9 @@ fn start_core(resource_dir: &Path, data_dir: &Path) -> Result<(CoreConnection, C
         if let Ok(body) = send_request(port, &token, "GET", "/api/v1/version") {
             let version: VersionResponse = serde_json::from_str(&body)
                 .map_err(|error| format!("无法解析 Core 版本响应：{error}"))?;
-            if version.api_version != "v1" {
+            if let Err(error) = validate_core_version(&version) {
                 let _ = child.kill();
-                return Err(format!("桌面端不支持 Core API {}。", version.api_version));
+                return Err(error);
             }
             return Ok((
                 CoreConnection {
@@ -507,8 +531,8 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        CoreConnection, CorePhase, CoreStatus, RuntimeSnapshot, recovery_delay,
-        reserve_loopback_port, update_snapshot,
+        CoreConnection, CorePhase, CoreStatus, RuntimeSnapshot, VersionResponse, recovery_delay,
+        reserve_loopback_port, update_snapshot, validate_core_version,
     };
     use std::net::TcpListener;
     use std::sync::{Arc, Mutex};
@@ -528,6 +552,23 @@ mod tests {
         assert_eq!(recovery_delay(2), Some(Duration::from_secs(1)));
         assert_eq!(recovery_delay(3), Some(Duration::from_secs(2)));
         assert_eq!(recovery_delay(4), None);
+    }
+
+    #[test]
+    fn rejects_mismatched_core_versions() {
+        let compatible = VersionResponse {
+            core_version: env!("CARGO_PKG_VERSION").into(),
+            api_version: "v1".into(),
+            app_schema_version: 7,
+            index_schema_version: 3,
+        };
+        assert!(validate_core_version(&compatible).is_ok());
+
+        let incompatible = VersionResponse {
+            index_schema_version: 4,
+            ..compatible
+        };
+        assert!(validate_core_version(&incompatible).is_err());
     }
 
     #[test]

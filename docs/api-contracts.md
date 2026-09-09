@@ -3,7 +3,7 @@
 ## Versioning
 
 - HTTP endpoints start with `/api/v1`.
-- Core and desktop exchange `/api/v1/version` before enabling application features.
+- Core and desktop exchange `/api/v1/version` before enabling application features. The response reports `core_version`, `api_version`, `app_schema_version`, and `index_schema_version`; bundled desktop builds reject any mismatch.
 - Additive response fields are compatible within v1.
 - Removing or changing a field's meaning requires a new API version or an explicit migration window.
 - Database schema, index schema, and build contracts use independent integer versions.

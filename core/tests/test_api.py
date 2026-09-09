@@ -40,6 +40,8 @@ def test_version_contract() -> None:
         "product": "LoreDock",
         "core_version": "0.1.0",
         "api_version": "v1",
+        "app_schema_version": 7,
+        "index_schema_version": 3,
     }
 
 

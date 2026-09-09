@@ -45,6 +45,7 @@ from loredock.retrieval.model_assets import (
 )
 from loredock.storage import AppDatabase, BackupError, BackupInfo, BackupManager, DataLayout
 from loredock.storage.database import utc_timestamp
+from loredock.version import INDEX_SCHEMA_VERSION
 
 SUPPORTED_SUFFIXES = {
     ".md",
@@ -344,7 +345,7 @@ class LoreDockService:
 
     def _manifest_payload(self) -> dict[str, object]:
         return {
-            "schema_version": 3,
+            "schema_version": INDEX_SCHEMA_VERSION,
             "embedding": {
                 "identifier": self.provider.identifier,
                 "dimensions": self.provider.dimensions,
@@ -372,7 +373,7 @@ class LoreDockService:
         if not paths.index.exists():
             return
         expected_metadata = {
-            "schema_version": "3",
+            "schema_version": str(INDEX_SCHEMA_VERSION),
             "embedding_provider": self.provider.identifier,
             "embedding_dimensions": str(self.provider.dimensions),
             "embedding_normalized": "true",
@@ -398,7 +399,7 @@ class LoreDockService:
                 )
             except (OSError, json.JSONDecodeError):
                 schema_version = None
-        if schema_version == 3 and actual_metadata == expected_metadata:
+        if schema_version == INDEX_SCHEMA_VERSION and actual_metadata == expected_metadata:
             return
         self._rebuild_library_index(library_id)
 

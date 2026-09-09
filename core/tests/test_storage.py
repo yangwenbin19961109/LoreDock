@@ -3,6 +3,7 @@ from pathlib import Path
 
 from loredock.storage import AppDatabase, DataLayout
 from loredock.storage.database import utc_timestamp
+from loredock.version import APP_SCHEMA_VERSION
 
 
 def test_migration_is_retry_safe(tmp_path: Path) -> None:
@@ -15,6 +16,27 @@ def test_migration_is_retry_safe(tmp_path: Path) -> None:
     second.close()
 
     assert version == 7
+
+
+def test_newer_schema_is_rejected_without_changing_its_version(tmp_path: Path) -> None:
+    path = tmp_path / "app.sqlite"
+    connection = sqlite3.connect(path)
+    connection.execute(f"PRAGMA user_version={APP_SCHEMA_VERSION + 1}")
+    connection.close()
+
+    try:
+        AppDatabase(path)
+    except RuntimeError as error:
+        assert "newer LoreDock version" in str(error)
+    else:
+        raise AssertionError("Expected a newer schema to be rejected")
+
+    connection = sqlite3.connect(path)
+    version = connection.execute("PRAGMA user_version").fetchone()[0]
+    journal_mode = connection.execute("PRAGMA journal_mode").fetchone()[0]
+    connection.close()
+    assert version == APP_SCHEMA_VERSION + 1
+    assert journal_mode == "delete"
 
 
 def test_settings_migration_has_safe_defaults(tmp_path: Path) -> None:

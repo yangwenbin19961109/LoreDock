@@ -9,7 +9,9 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import Lock
 
-SCHEMA_VERSION = 7
+from loredock.version import APP_SCHEMA_VERSION
+
+SCHEMA_VERSION = APP_SCHEMA_VERSION
 _timestamp_lock = Lock()
 _last_timestamp: datetime | None = None
 
@@ -30,8 +32,12 @@ class AppDatabase:
         self.connection = sqlite3.connect(path, check_same_thread=False)
         self.connection.row_factory = sqlite3.Row
         self.connection.execute("PRAGMA foreign_keys=ON")
-        self.connection.execute("PRAGMA journal_mode=WAL")
-        self.migrate()
+        try:
+            self.migrate()
+            self.connection.execute("PRAGMA journal_mode=WAL")
+        except Exception:
+            self.connection.close()
+            raise
 
     def close(self) -> None:
         self.connection.close()

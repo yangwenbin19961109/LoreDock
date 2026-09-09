@@ -13,4 +13,4 @@ Accepted ADRs are immutable historical records. If a decision changes, add a new
 
 Current accepted decisions include the Python Core sidecar boundary, its authenticated lifecycle,
 per-library SQLite indexes, hybrid retrieval, authoritative original sources, hybrid Child retrieval with on-demand Parent
-context, and managed consistent backups with restart-boundary restoration.
+context, managed consistent backups with restart-boundary restoration, and explicit runtime version compatibility boundaries.

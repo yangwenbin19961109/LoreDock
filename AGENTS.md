@@ -131,3 +131,38 @@ Before handing off:
 - Use relative links inside repository Markdown.
 - Examples must use fake credentials and non-sensitive sample content.
 - Record significant decisions using `docs/decisions/0000-template.md`.
+
+
+
+
+
+
+
+## For long-running asynchronous work
+
+- Empty `write_stdin` polls MUST use `yield_time_ms >= 180000`; prefer `300000` when intermediate output is not needed.
+- `functions.wait` MUST use `yield_time_ms >= 180000`.
+- `functions.exec` MUST set its outer `@exec yield_time_ms` at least 30000 ms longer than the longest nested tool wait.
+- Do not apply the long wait to non-empty `write_stdin` calls that send interactive input.
+- These tools return early when the process or cell completes.
+Do not wake the model merely to report that work is still running.
+
+## **Coding Standards**
+
+- Do not preserve backward compatibility. Remove obsolete paths instead of
+adding compatibility layers, fallbacks, or migrations.
+- Choose the simplest implementation that fully meets the current
+requirements. Avoid speculative abstractions, configuration, and
+indirection.
+- Grow the system in layers. Start from the smallest version that works end
+to end, and add each new capability on top of a product that already
+works. Never trade a working product for unfinished complexity.
+- Keep components modular and concerns clearly separated.
+- Prefer established, well-maintained libraries when they reduce overall
+complexity or improve reliability. Do not reimplement common
+functionality without a clear reason.
+- Lean on the dependencies already in the project before writing your own
+implementation or adding packages. Do not assume a library lacks a
+capability without checking its documentation and types.
+- Make architectural decisions for the long term. Do not accept a stopgap
+that only works for now and is meant to be replaced later.

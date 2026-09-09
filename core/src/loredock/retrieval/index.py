@@ -14,6 +14,7 @@ from loredock.retrieval.analyzer import fts_query, lexical_text
 from loredock.retrieval.chunking import ParentSection, TextChunk
 from loredock.retrieval.embeddings import EmbeddingProvider, Vector
 from loredock.retrieval.fusion import reciprocal_rank_fusion
+from loredock.version import INDEX_SCHEMA_VERSION
 
 
 class SqliteVecModule(Protocol):
@@ -117,7 +118,7 @@ class HybridSearchIndex:
             """
         )
         expected = {
-            "schema_version": "3",
+            "schema_version": str(INDEX_SCHEMA_VERSION),
             "embedding_provider": self.provider.identifier,
             "embedding_dimensions": str(dimensions),
             "embedding_normalized": "true",

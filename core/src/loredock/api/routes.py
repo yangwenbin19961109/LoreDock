@@ -33,7 +33,7 @@ from loredock.api.contracts import (
 from loredock.api.pagination import SourceCursor, decode_source_cursor, encode_source_cursor
 from loredock.application import LoreDockService
 from loredock.application.errors import AppError
-from loredock.version import API_VERSION, __version__
+from loredock.version import API_VERSION, APP_SCHEMA_VERSION, INDEX_SCHEMA_VERSION, __version__
 
 router = APIRouter(prefix=f"/api/{API_VERSION}")
 
@@ -162,7 +162,12 @@ async def health() -> HealthResponse:
 async def version() -> VersionResponse:
     """Return the desktop/Core compatibility handshake payload."""
 
-    return VersionResponse(core_version=__version__, api_version=API_VERSION)
+    return VersionResponse(
+        core_version=__version__,
+        api_version=API_VERSION,
+        app_schema_version=APP_SCHEMA_VERSION,
+        index_schema_version=INDEX_SCHEMA_VERSION,
+    )
 
 
 @router.post("/desktop/shutdown", status_code=status.HTTP_202_ACCEPTED, tags=["system"])

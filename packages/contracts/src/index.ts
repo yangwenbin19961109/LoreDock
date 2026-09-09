@@ -1,5 +1,7 @@
 export const API_VERSION = 'v1' as const
 export const CORE_VERSION = '0.1.0' as const
+export const APP_SCHEMA_VERSION = 7 as const
+export const INDEX_SCHEMA_VERSION = 3 as const
 
 export type ApiVersion = typeof API_VERSION
 
@@ -14,6 +16,8 @@ export interface VersionResponse {
   readonly product: 'LoreDock'
   readonly core_version: string
   readonly api_version: ApiVersion
+  readonly app_schema_version: number
+  readonly index_schema_version: number
 }
 
 export type ThemePreference = 'system' | 'light' | 'dark'

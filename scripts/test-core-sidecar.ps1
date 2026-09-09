@@ -78,8 +78,23 @@ try {
         throw "Packaged source upload failed."
     }
     $upload = $uploadJson | ConvertFrom-Json
-    if ($upload.source.status -ne "ready") {
-        throw "Unexpected source status: $($upload.source.status)"
+    $job = $upload.job
+    for ($attempt = 0; $attempt -lt 100 -and $job.status -notin @("succeeded", "failed"); $attempt++) {
+        Start-Sleep -Milliseconds 100
+        $job = Invoke-RestMethod `
+            -Uri "http://127.0.0.1:$smokePort/api/v1/jobs/$($upload.job.id)" `
+            -Headers $headers `
+            -TimeoutSec 1
+    }
+    if ($job.status -ne "succeeded") {
+        throw "Packaged source indexing did not succeed: $($job.status)"
+    }
+    $source = Invoke-RestMethod `
+        -Uri "http://127.0.0.1:$smokePort/api/v1/sources/$($upload.source.id)" `
+        -Headers $headers `
+        -TimeoutSec 1
+    if ($source.status -ne "ready") {
+        throw "Unexpected source status after indexing: $($source.status)"
     }
 
     Invoke-RestMethod `
@@ -93,7 +108,7 @@ try {
         Ready = $health.status
         Port = $smokePort
         UnauthorizedStatus = 401
-        ImportedStatus = $upload.source.status
+        ImportedStatus = $source.status
         Exited = $sidecarProcess.HasExited
         SizeMiB = [math]::Round($size / 1MB, 1)
     }
@@ -101,8 +116,23 @@ try {
 finally {
     if (-not $sidecarProcess.HasExited) {
         Stop-Process -Id $sidecarProcess.Id -Force -ErrorAction SilentlyContinue
+        Wait-Process -Id $sidecarProcess.Id -Timeout 5 -ErrorAction SilentlyContinue
     }
     if (Test-Path -LiteralPath $resolvedSmokeRoot) {
-        Remove-Item -LiteralPath $resolvedSmokeRoot -Recurse -Force
+        $cleanupError = $null
+        for ($attempt = 0; $attempt -lt 10; $attempt++) {
+            try {
+                Remove-Item -LiteralPath $resolvedSmokeRoot -Recurse -Force
+                $cleanupError = $null
+                break
+            }
+            catch {
+                $cleanupError = $_
+                Start-Sleep -Milliseconds 250
+            }
+        }
+        if ($cleanupError) {
+            throw $cleanupError
+        }
     }
 }

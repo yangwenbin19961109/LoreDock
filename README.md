@@ -39,7 +39,7 @@ LoreDock 是一个轻量、本地优先的个人知识库。它帮助普通用�
 
 ## 当前状态
 
-Phase 0～2 Core 闭环和 Phase 2.5 分层混合检索主路径已经完成。Phase 3 已完成前十二批：三栏知识库 UI、资料管理与搜索、安全结构化预览、明暗主题、首次启动与常规设置、带真实进度和断点续传的本地模型管理、Tauri Core 生命周期、有界异常恢复与诊断、Windows 独立 Core、MSI/NSIS 本地验收包，以及受保护的干净虚拟机验收脚本。下一步是在干净虚拟机执行安装矩阵，并进入 Phase 4 只读 MCP 契约与服务实现；安装包签名、跨平台验证和 MCP 接入尚未完成。
+Phase 0～2 Core 闭环、Phase 2.5 分层混合检索、Phase 3 Windows 桌面 MVP、Phase 4 本地只读 MCP 接入和 Phase 5 首期资料扩展均已完成。最新 Windows MSI/NSIS 已通过项目负责人人工验收；安装包签名、覆盖升级自动矩阵、macOS/Linux 发布验证和 Cursor 实机验收仍未完成。
 
 初始化开发环境：
 

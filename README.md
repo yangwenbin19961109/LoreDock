@@ -24,6 +24,10 @@ LoreDock 是一个轻量、本地优先的个人知识库。它帮助普通用�
 
 ## 文档
 
+- [用户指南](docs/user-guide.md)
+- [Windows 部署说明](docs/deployment.md)
+- [故障排查](docs/troubleshooting.md)
+- [Agent 接入指南](docs/agent-setup-guide.md)
 - [技术架构与开发方案](docs/technical-architecture.md)
 - [分阶段开发计划](docs/development-plan.md)
 - [当前开发进度与下一步](docs/current-progress.md)

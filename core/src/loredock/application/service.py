@@ -659,53 +659,61 @@ class LoreDockService:
             resolved_media_type = (
                 media_type or mimetypes.guess_type(safe_name)[0] or "application/octet-stream"
             )
-            with self.database.transaction() as connection:
-                connection.execute(
-                    """
+            try:
+                with self.database.transaction() as connection:
+                    connection.execute(
+                        """
                     INSERT INTO sources(
                         id, library_id, name, media_type, suffix, status, content_hash,
                         size_bytes, source_kind, origin_url, created_at, updated_at
                     ) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)
                     """,
-                    (
-                        source_id,
-                        library_id,
-                        safe_name,
-                        resolved_media_type,
-                        suffix,
-                        content_hash,
-                        size,
-                        source_kind,
-                        origin_url,
-                        now,
-                        now,
-                    ),
-                )
-                connection.execute(
-                    """
+                        (
+                            source_id,
+                            library_id,
+                            safe_name,
+                            resolved_media_type,
+                            suffix,
+                            content_hash,
+                            size,
+                            source_kind,
+                            origin_url,
+                            now,
+                            now,
+                        ),
+                    )
+                    connection.execute(
+                        """
                     INSERT INTO jobs(
                         id, library_id, source_id, batch_id, kind, status, attempts, progress,
                         created_at, updated_at
                     ) VALUES (?, ?, ?, ?, 'index_source', ?, ?, 0.1, ?, ?)
                     """,
-                    (
-                        job_id,
-                        library_id,
-                        source_id,
-                        batch_id,
-                        "pending" if background else "running",
-                        0 if background else 1,
-                        now,
-                        now,
-                    ),
-                )
-                if batch_id is not None:
-                    connection.execute(
-                        "INSERT INTO import_batch_items("
-                        "id, batch_id, source_id, job_id, name, outcome, created_at) "
-                        "VALUES (?, ?, ?, ?, ?, 'queued', ?)",
-                        (str(uuid4()), batch_id, source_id, job_id, safe_name, now),
+                        (
+                            job_id,
+                            library_id,
+                            source_id,
+                            batch_id,
+                            "pending" if background else "running",
+                            0 if background else 1,
+                            now,
+                            now,
+                        ),
                     )
+                    if batch_id is not None:
+                        connection.execute(
+                            "INSERT INTO import_batch_items("
+                            "id, batch_id, source_id, job_id, name, outcome, created_at) "
+                            "VALUES (?, ?, ?, ?, ?, 'queued', ?)",
+                            (str(uuid4()), batch_id, source_id, job_id, safe_name, now),
+                        )
+            except (OSError, sqlite3.Error) as error:
+                raw_path.unlink(missing_ok=True)
+                raise AppError(
+                    "source_store_failed",
+                    "The document could not be stored.",
+                    status_code=507,
+                ) from error
             if background:
                 self._job_wakeup.set()
                 return self.get_source(source_id), self.get_job(job_id), False

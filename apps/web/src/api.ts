@@ -1,6 +1,9 @@
 import {
   type AppSettings,
   type AppSettingsUpdate,
+  type Backup,
+  type BackupId,
+  type BackupRestoreResponse,
   coreEndpoint,
   type ErrorResponse,
   type HealthResponse,
@@ -76,6 +79,22 @@ export const coreApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     })
+  },
+
+  listBackups(): Promise<Page<Backup>> {
+    return request<Page<Backup>>('backups')
+  },
+
+  createBackup(): Promise<Backup> {
+    return request<Backup>('backups', { method: 'POST' })
+  },
+
+  verifyBackup(backupId: BackupId): Promise<Backup> {
+    return request<Backup>(`backups/${backupId}/verify`, { method: 'POST' })
+  },
+
+  restoreBackup(backupId: BackupId): Promise<BackupRestoreResponse> {
+    return request<BackupRestoreResponse>(`backups/${backupId}/restore`, { method: 'POST' })
   },
 
   getDefaultModel(signal?: AbortSignal): Promise<ModelStatus> {

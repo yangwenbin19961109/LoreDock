@@ -366,6 +366,7 @@ src/loredock/
 - SQLite 使用在线 backup API 或一致性快照，不能在 WAL 活跃时只复制主文件。
 - 索引默认可排除并在恢复后重建；若携带索引，必须校验 schema、模型和构建契约。
 - 数据格式与应用版本分离，所有 schema 使用显式版本号。
+- 一期托管备份采用版本化归档并记录逐文件 SHA-256；在线创建时所有 SQLite 文件使用 Backup API。恢复先校验、再写入待恢复标记，并只在 Core 重启、数据库尚未打开时原子切换；失败恢复原数据。详细决策见 [ADR 0019](decisions/0019-managed-backup-restore.md)。
 - 二期实现导出时应优先提供原始资料和可读的 Markdown/JSON，避免形成产品锁定；该能力不属于一期 Phase 0～7 的发布范围。
 
 ## 14. 质量与评测

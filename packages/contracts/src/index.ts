@@ -32,6 +32,21 @@ export interface AppSettingsUpdate {
   readonly default_search_mode: DefaultSearchMode
 }
 
+export type BackupId = string & { readonly __brand: 'BackupId' }
+
+export interface Backup {
+  readonly id: BackupId
+  readonly created_at: string
+  readonly size_bytes: number
+  readonly file_count: number
+  readonly status: 'valid' | 'invalid'
+}
+
+export interface BackupRestoreResponse {
+  readonly backup: Backup
+  readonly restart_required: true
+}
+
 export interface ModelStatus {
   readonly model_id: string
   readonly display_name: string

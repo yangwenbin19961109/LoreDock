@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import type {
   AppSettings,
+  Backup,
   CitationRange,
   ImportBatch,
   ImportBatchId,
@@ -152,6 +153,8 @@ export function App() {
   const [showAgents, setShowAgents] = useState(false)
   const [collection, setCollection] = useState<CollectionKind>()
   const [settings, setSettings] = useState<AppSettings>()
+  const [backups, setBackups] = useState<readonly Backup[]>([])
+  const [backupBusy, setBackupBusy] = useState(false)
   const [modelStatus, setModelStatus] = useState<ModelStatus>()
   const [modelJob, setModelJob] = useState<ModelJob | null>(null)
   const [libraryName, setLibraryName] = useState('')
@@ -183,6 +186,16 @@ export function App() {
     () => Object.values(jobs).filter((job) => ['pending', 'running'].includes(job.status)),
     [jobs]
   )
+
+  useEffect(() => {
+    if (!showSettings || coreState !== 'ready') return
+    void coreApi
+      .listBackups()
+      .then((page) => setBackups(page.items))
+      .catch((reason: unknown) => {
+        setError(reason instanceof Error ? reason.message : '无法读取备份列表。')
+      })
+  }, [coreState, showSettings])
 
   useEffect(() => {
     if (!selectedId || coreState !== 'ready') return
@@ -967,6 +980,47 @@ export function App() {
       setError(reason instanceof Error ? reason.message : '设置保存失败。')
     } finally {
       setBusy(false)
+    }
+  }
+
+  async function createBackup(): Promise<void> {
+    setBackupBusy(true)
+    setError(undefined)
+    try {
+      await coreApi.createBackup()
+      setBackups((await coreApi.listBackups()).items)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '备份创建失败。')
+    } finally {
+      setBackupBusy(false)
+    }
+  }
+
+  async function verifyBackup(backup: Backup): Promise<void> {
+    setBackupBusy(true)
+    setError(undefined)
+    try {
+      const verified = await coreApi.verifyBackup(backup.id)
+      setBackups((current) => current.map((item) => (item.id === verified.id ? verified : item)))
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '备份校验失败。')
+    } finally {
+      setBackupBusy(false)
+    }
+  }
+
+  async function restoreBackup(backup: Backup): Promise<void> {
+    if (!window.confirm('恢复会把知识库还原到此备份的状态。当前数据不会合并，是否继续？')) return
+    setBackupBusy(true)
+    setError(undefined)
+    try {
+      await coreApi.restoreBackup(backup.id)
+      setShowSettings(false)
+      await restartCore()
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '备份恢复失败。')
+    } finally {
+      setBackupBusy(false)
     }
   }
 
@@ -1802,6 +1856,56 @@ export function App() {
                 SHA-256 校验。
               </p>
             )}
+            <section className="backup-card" aria-label="备份与恢复">
+              <div className="backup-card__header">
+                <div>
+                  <strong>备份与恢复</strong>
+                  <p>备份包含原始资料、元数据、解析产物和一致性搜索索引。</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={backupBusy}
+                  onClick={() => void createBackup()}
+                >
+                  {backupBusy ? '处理中…' : '立即备份'}
+                </Button>
+              </div>
+              {backups.length === 0 ? (
+                <p className="setting-note">尚无本机备份。</p>
+              ) : (
+                <div className="backup-list">
+                  {backups.slice(0, 5).map((backup) => (
+                    <div className="backup-row" key={backup.id}>
+                      <div>
+                        <strong>{new Date(backup.created_at).toLocaleString()}</strong>
+                        <small>
+                          {formatBytes(backup.size_bytes)} · {backup.file_count} 个文件 ·{' '}
+                          {backup.status === 'valid' ? '完整' : '校验失败'}
+                        </small>
+                      </div>
+                      <div className="backup-row__actions">
+                        <button
+                          type="button"
+                          disabled={backupBusy}
+                          onClick={() => void verifyBackup(backup)}
+                        >
+                          校验
+                        </button>
+                        <button
+                          type="button"
+                          disabled={backupBusy || backup.status !== 'valid'}
+                          onClick={() => void restoreBackup(backup)}
+                        >
+                          恢复
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="setting-note">恢复会先校验备份，并在 Core 重启前保持当前数据不变。</p>
+            </section>
             <div className="dialog-actions">
               <Button type="button" variant="ghost" onClick={() => setShowSettings(false)}>
                 取消

@@ -83,6 +83,10 @@ must not branch on free-form text.
 | `POST` | `/api/v1/import-batches/{batch_id}/retry` | Retry failed or canceled items below the attempt limit |
 | `GET` | `/api/v1/settings` | Read non-sensitive application preferences |
 | `PUT` | `/api/v1/settings` | Replace non-sensitive application preferences |
+| `POST` | `/api/v1/backups` | Create and verify a managed consistent backup |
+| `GET` | `/api/v1/backups` | List managed backups and validity state |
+| `POST` | `/api/v1/backups/{backup_id}/verify` | Re-run manifest, checksum and SQLite integrity checks |
+| `POST` | `/api/v1/backups/{backup_id}/restore` | Schedule verified restoration for the next Core restart |
 | `GET` | `/api/v1/models/default` | Read the pinned local embedding model state |
 | `POST` | `/api/v1/models/default/install` | Start or reuse the pinned model install job |
 | `GET` | `/api/v1/models/jobs/latest` | Read the latest model install job, if any |
@@ -96,6 +100,20 @@ Settings use a singleton resource persisted in `app.sqlite`. The v1 payload cont
 `onboarding_completed`, `theme` (`system`, `light`, or `dark`), and `default_search_mode`
 (`hybrid` or `lexical`). `PUT` replaces the complete resource so clients cannot accidentally retain
 unknown future values. Credentials and model-provider secrets are never part of this contract.
+
+### Managed backups
+
+Managed backups are versioned archives under the LoreDock data directory. `app.sqlite` and every
+knowledge-library `index.sqlite` are copied with the SQLite Backup API while writers are excluded;
+raw sources, parsed artifacts and build manifests are included. Each file is bound to the archive
+manifest by its relative path, byte size and SHA-256. Verification also runs SQLite `quick_check`
+and foreign-key checks.
+
+Restore never replaces a live database. A successful restore request first creates a recovery point
+for the current state, verifies the selected archive and writes a pending marker. The desktop then
+restarts Core, which performs the replacement before opening any database connection and rolls back
+the original files if switching fails. The response contains `restart_required: true`. Backups do
+not contain OS credential-store secrets, Agent connection metadata or downloaded model assets.
 
 ### Managed default model
 

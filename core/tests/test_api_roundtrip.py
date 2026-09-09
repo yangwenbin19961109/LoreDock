@@ -236,3 +236,23 @@ def test_http_api_imports_bounded_url_snapshot(tmp_path: Path) -> None:
     content = client.get(f"/api/v1/sources/{source['id']}/content")
     assert content.json()["text"] == "HTTP imported web knowledge"
     service.close()
+
+
+def test_http_api_creates_verifies_and_schedules_managed_backup(tmp_path: Path) -> None:
+    service = LoreDockService(tmp_path)
+    app = create_app(data_dir=tmp_path)
+    app.state.service = service
+    client = cast(HttpClient, TestClient(app))
+    client.post("/api/v1/libraries", json={"name": "Backup fixture"})
+
+    created = client.post("/api/v1/backups")
+    assert created.status_code == 201
+    backup_id = str(created.json()["id"])
+    assert created.json()["status"] == "valid"
+    assert client.get("/api/v1/backups").json()["items"][0]["id"] == backup_id
+    assert client.post(f"/api/v1/backups/{backup_id}/verify").json()["status"] == "valid"
+
+    restore = client.post(f"/api/v1/backups/{backup_id}/restore")
+    assert restore.json()["restart_required"] is True
+    assert (tmp_path / "pending-restore.json").is_file()
+    service.close()

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type { ImportBatchId, JobId, LibraryId, SourceId } from '@loredock/contracts'
+import type { BackupId, ImportBatchId, JobId, LibraryId, SourceId } from '@loredock/contracts'
 
 import { coreApi } from './api'
 import type { CoreApiError } from './api'
@@ -43,6 +43,26 @@ describe('LoreDock Core API client', () => {
       '/api/v1/settings',
       expect.objectContaining({ method: 'PUT', body: JSON.stringify(payload) })
     )
+  })
+
+  it('creates and schedules a managed backup restore', async () => {
+    const fetchMock = vi.fn().mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: 'backup-id', status: 'valid' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      )
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await coreApi.createBackup()
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/backups', { method: 'POST' })
+
+    await coreApi.restoreBackup('backup-id' as BackupId)
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/backups/backup-id/restore', {
+      method: 'POST'
+    })
   })
 
   it('reads the managed model state', async () => {

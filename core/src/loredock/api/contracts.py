@@ -41,6 +41,19 @@ class AppSettingsUpdate(ApiModel):
     default_search_mode: Literal["hybrid", "lexical"]
 
 
+class BackupResponse(ApiModel):
+    id: str
+    created_at: str
+    size_bytes: int
+    file_count: int
+    status: Literal["valid", "invalid"]
+
+
+class BackupRestoreResponse(ApiModel):
+    backup: BackupResponse
+    restart_required: Literal[True] = True
+
+
 class ModelStatusResponse(ApiModel):
     model_id: str
     display_name: str

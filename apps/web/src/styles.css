@@ -1373,6 +1373,10 @@ h2 {
   border-radius: 12px;
   box-shadow: var(--ld-shadow-popover);
 }
+.settings-dialog {
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+}
 .dialog > p:not(.eyebrow) {
   color: var(--ld-color-text-muted);
   line-height: 1.6;
@@ -1557,6 +1561,52 @@ h2 {
   color: var(--ld-color-text-muted);
   font-size: 12px;
 }
+.backup-card {
+  display: grid;
+  gap: 12px;
+  margin-top: 20px;
+  padding: 16px;
+  background: #f6f9ff;
+  border: 1px solid var(--ld-color-border);
+  border-radius: 10px;
+}
+.backup-card__header,
+.backup-row,
+.backup-row__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.backup-card p {
+  margin: 5px 0 0;
+  color: var(--ld-color-text-muted);
+  font-size: 12px;
+}
+.backup-list {
+  display: grid;
+  gap: 8px;
+}
+.backup-row {
+  padding-top: 10px;
+  border-top: 1px solid var(--ld-color-border);
+}
+.backup-row small {
+  display: block;
+  margin-top: 4px;
+  color: var(--ld-color-text-muted);
+}
+.backup-row__actions button {
+  padding: 0;
+  color: var(--ld-color-primary);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.backup-row__actions button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 .onboarding-backdrop {
   background: rgb(15 23 42 / 58%);
 }
@@ -1593,6 +1643,9 @@ h2 {
 [data-theme='dark'] .result-card,
 [data-theme='dark'] .drop-zone,
 [data-theme='dark'] .model-card {
+  background: var(--ld-color-surface-muted);
+}
+[data-theme='dark'] .backup-card {
   background: var(--ld-color-surface-muted);
 }
 [data-theme='dark'] .work-area {

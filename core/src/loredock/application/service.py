@@ -16,6 +16,7 @@ from uuid import uuid4
 from loredock.application.errors import AppError
 from loredock.application.records import (
     AppSettingsRecord,
+    BackupRecord,
     ImportBatchRecord,
     IndexStatusRecord,
     JobRecord,
@@ -42,7 +43,7 @@ from loredock.retrieval.model_assets import (
     required_e5_install_bytes,
     validate_e5_package,
 )
-from loredock.storage import AppDatabase, DataLayout
+from loredock.storage import AppDatabase, BackupError, BackupInfo, BackupManager, DataLayout
 from loredock.storage.database import utc_timestamp
 
 SUPPORTED_SUFFIXES = {
@@ -75,6 +76,8 @@ class LoreDockService:
         url_fetcher: UrlFetcher | None = None,
     ) -> None:
         self.layout = DataLayout(data_dir)
+        self.backups = BackupManager(self.layout.root)
+        self.backups.apply_pending_restore()
         self.layout.initialize()
         self.database = AppDatabase(self.layout.root / "app.sqlite")
         self._lock = RLock()
@@ -129,6 +132,47 @@ class LoreDockService:
             free_space_bytes=shutil.disk_usage(self.layout.root).free,
             error=error,
         )
+
+    @staticmethod
+    def _backup_record(info: BackupInfo) -> BackupRecord:
+        return BackupRecord(
+            id=info.id,
+            created_at=info.created_at,
+            size_bytes=info.size_bytes,
+            file_count=info.file_count,
+            status=info.status,
+        )
+
+    def create_backup(self) -> BackupRecord:
+        with self._lock, self._index_lock:
+            try:
+                return self._backup_record(
+                    self.backups.create(self.database, self.layout.libraries)
+                )
+            except (BackupError, OSError, sqlite3.Error) as error:
+                raise AppError("backup_failed", "The backup could not be created.") from error
+
+    def list_backups(self) -> list[BackupRecord]:
+        return [self._backup_record(info) for info in self.backups.list()]
+
+    def verify_backup(self, backup_id: str) -> BackupRecord:
+        try:
+            return self._backup_record(self.backups.verify(backup_id))
+        except (BackupError, OSError, sqlite3.Error) as error:
+            raise AppError(
+                "backup_invalid", "The backup is missing or invalid.", status_code=404
+            ) from error
+
+    def schedule_backup_restore(self, backup_id: str) -> BackupRecord:
+        with self._lock, self._index_lock:
+            try:
+                self.backups.verify(backup_id)
+                self.backups.create(self.database, self.layout.libraries)
+                return self._backup_record(self.backups.schedule_restore(backup_id))
+            except (BackupError, OSError, sqlite3.Error) as error:
+                raise AppError(
+                    "backup_invalid", "The backup is missing or invalid.", status_code=404
+                ) from error
 
     @staticmethod
     def _model_job(row: sqlite3.Row) -> ModelJobRecord:

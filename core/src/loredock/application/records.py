@@ -13,6 +13,15 @@ class AppSettingsRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class BackupRecord:
+    id: str
+    created_at: str
+    size_bytes: int
+    file_count: int
+    status: Literal["valid", "invalid"]
+
+
+@dataclass(frozen=True, slots=True)
 class ModelStatusRecord:
     model_id: str
     display_name: str

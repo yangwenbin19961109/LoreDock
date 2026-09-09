@@ -7,6 +7,8 @@ from fastapi import APIRouter, Depends, File, Query, Request, Response, UploadFi
 from loredock.api.contracts import (
     AppSettingsResponse,
     AppSettingsUpdate,
+    BackupResponse,
+    BackupRestoreResponse,
     FavoriteState,
     HealthResponse,
     ImportBatchCreate,
@@ -87,6 +89,30 @@ def get_settings(service: Service) -> AppSettingsResponse:
 @router.put("/settings", response_model=AppSettingsResponse, tags=["settings"])
 def update_settings(payload: AppSettingsUpdate, service: Service) -> AppSettingsResponse:
     return AppSettingsResponse.model_validate(service.update_settings(**payload.model_dump()))
+
+
+@router.post(
+    "/backups", response_model=BackupResponse, status_code=status.HTTP_201_CREATED, tags=["backups"]
+)
+def create_backup(service: Service) -> BackupResponse:
+    return BackupResponse.model_validate(service.create_backup())
+
+
+@router.get("/backups", response_model=Page[BackupResponse], tags=["backups"])
+def list_backups(service: Service) -> Page[BackupResponse]:
+    items = [BackupResponse.model_validate(item) for item in service.list_backups()]
+    return Page(items=items, page=PageInfo(limit=200))
+
+
+@router.post("/backups/{backup_id}/verify", response_model=BackupResponse, tags=["backups"])
+def verify_backup(backup_id: str, service: Service) -> BackupResponse:
+    return BackupResponse.model_validate(service.verify_backup(backup_id))
+
+
+@router.post("/backups/{backup_id}/restore", response_model=BackupRestoreResponse, tags=["backups"])
+def restore_backup(backup_id: str, service: Service) -> BackupRestoreResponse:
+    backup = BackupResponse.model_validate(service.schedule_backup_restore(backup_id))
+    return BackupRestoreResponse(backup=backup)
 
 
 @router.get("/models/default", response_model=ModelStatusResponse, tags=["models"])

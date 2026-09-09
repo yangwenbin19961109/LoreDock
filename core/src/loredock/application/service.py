@@ -16,6 +16,7 @@ from uuid import uuid4
 from loredock.application.errors import AppError
 from loredock.application.records import (
     AppSettingsRecord,
+    ImportBatchRecord,
     IndexStatusRecord,
     JobRecord,
     LibraryRecord,
@@ -58,6 +59,14 @@ SUPPORTED_SUFFIXES = {
 MAX_SOURCE_BYTES = 100 * 1024 * 1024
 
 
+class JobCancelled(Exception):
+    """Internal cooperative cancellation signal for an indexing stage boundary."""
+
+
+class JobPaused(Exception):
+    """Internal cooperative pause signal for a batch at an indexing stage boundary."""
+
+
 class LoreDockService:
     def __init__(
         self,
@@ -68,11 +77,20 @@ class LoreDockService:
         self.layout = DataLayout(data_dir)
         self.layout.initialize()
         self.database = AppDatabase(self.layout.root / "app.sqlite")
+        self._lock = RLock()
+        self._index_lock = RLock()
         self.database.recover_interrupted_jobs()
         self.provider = provider or HashingEmbeddingProvider()
         self.url_fetcher = url_fetcher or UrlFetcher()
         self.chunking = ChunkingConfig()
-        self._lock = RLock()
+        self._job_stop = Event()
+        self._job_wakeup = Event()
+        self._job_worker_id = f"source-worker-{uuid4()}"
+        self._job_thread = Thread(
+            target=self._run_job_worker,
+            name="loredock-source-worker",
+            daemon=True,
+        )
         self._model_stop = Event()
         self._model_cancel = Event()
         self._model_thread: Thread | None = None
@@ -82,6 +100,8 @@ class LoreDockService:
         ).fetchone()
         if pending is not None:
             self._start_model_worker(str(pending["id"]))
+        self._job_thread.start()
+        self._job_wakeup.set()
 
     @property
     def managed_model_dir(self) -> Path:
@@ -378,9 +398,14 @@ class LoreDockService:
 
     def close(self) -> None:
         self._model_stop.set()
+        self._job_stop.set()
+        self._job_wakeup.set()
         if self._model_thread is not None:
             self._model_thread.join(timeout=2)
-        if self._model_thread is not None and self._model_thread.is_alive():
+        self._job_thread.join(timeout=5)
+        if (
+            self._model_thread is not None and self._model_thread.is_alive()
+        ) or self._job_thread.is_alive():
             return
         self.database.close()
 
@@ -416,6 +441,7 @@ class LoreDockService:
             id=str(row["id"]),
             library_id=str(row["library_id"]),
             source_id=str(row["source_id"]) if row["source_id"] is not None else None,
+            batch_id=str(row["batch_id"]) if row["batch_id"] is not None else None,
             kind=str(row["kind"]),
             status=str(row["status"]),
             attempts=int(row["attempts"]),
@@ -508,10 +534,11 @@ class LoreDockService:
     def _set_job(
         self, job_id: str, status: str, progress: float, *, error: str | None = None
     ) -> None:
-        with self.database.transaction() as connection:
+        with self._lock, self.database.transaction() as connection:
             connection.execute(
                 """
-                UPDATE jobs SET status=?, progress=?, error=?, updated_at=? WHERE id=?
+                UPDATE jobs SET status=?, progress=?, error=?, updated_at=?
+                WHERE id=? AND status != 'canceled'
                 """,
                 (status, progress, error, utc_timestamp(), job_id),
             )
@@ -525,16 +552,29 @@ class LoreDockService:
         *,
         source_kind: str = "file",
         origin_url: str | None = None,
+        batch_id: str | None = None,
+        background: bool = False,
     ) -> tuple[SourceRecord, JobRecord, bool]:
         self.get_library(library_id)
+        if batch_id is not None:
+            batch = self.get_import_batch(batch_id)
+            if batch.library_id != library_id:
+                raise AppError("batch_library_mismatch", "The batch belongs to another library.")
+            row = self.database.connection.execute(
+                "SELECT sealed, control_state FROM import_batches WHERE id=?", (batch_id,)
+            ).fetchone()
+            if row is None or bool(row["sealed"]) or row["control_state"] == "canceled":
+                raise AppError(
+                    "batch_not_accepting_items",
+                    "The batch is no longer accepting items.",
+                    status_code=409,
+                )
         if source_kind not in {"file", "url"}:
             raise AppError("invalid_source_kind", "The source kind is invalid.")
         if source_kind == "file" and origin_url is not None:
             raise AppError("invalid_source_origin", "File sources cannot have an origin URL.")
         if source_kind == "url" and not origin_url:
             raise AppError("invalid_source_origin", "URL sources require an origin URL.")
-        with self._lock:
-            self._ensure_index_contract(library_id)
         safe_name = Path(filename.replace("\\", "/")).name
         suffix = Path(safe_name).suffix.lower()
         if suffix not in SUPPORTED_SUFFIXES:
@@ -553,7 +593,23 @@ class LoreDockService:
             if duplicate is not None:
                 raw_path.unlink(missing_ok=True)
                 existing = self._source(duplicate)
-                return existing, self.latest_job_for_source(existing.id), True
+                existing_job = self.latest_job_for_source(existing.id)
+                if batch_id is not None:
+                    with self.database.transaction() as connection:
+                        connection.execute(
+                            "INSERT INTO import_batch_items("
+                            "id, batch_id, source_id, job_id, name, outcome, created_at) "
+                            "VALUES (?, ?, ?, ?, ?, 'duplicate', ?)",
+                            (
+                                str(uuid4()),
+                                batch_id,
+                                existing.id,
+                                existing_job.id,
+                                safe_name,
+                                utc_timestamp(),
+                            ),
+                        )
+                return existing, existing_job, True
             now = utc_timestamp()
             resolved_media_type = (
                 media_type or mimetypes.guess_type(safe_name)[0] or "application/octet-stream"
@@ -583,12 +639,31 @@ class LoreDockService:
                 connection.execute(
                     """
                     INSERT INTO jobs(
-                        id, library_id, source_id, kind, status, attempts, progress,
+                        id, library_id, source_id, batch_id, kind, status, attempts, progress,
                         created_at, updated_at
-                    ) VALUES (?, ?, ?, 'index_source', 'running', 1, 0.1, ?, ?)
+                    ) VALUES (?, ?, ?, ?, 'index_source', ?, ?, 0.1, ?, ?)
                     """,
-                    (job_id, library_id, source_id, now, now),
+                    (
+                        job_id,
+                        library_id,
+                        source_id,
+                        batch_id,
+                        "pending" if background else "running",
+                        0 if background else 1,
+                        now,
+                        now,
+                    ),
                 )
+                if batch_id is not None:
+                    connection.execute(
+                        "INSERT INTO import_batch_items("
+                        "id, batch_id, source_id, job_id, name, outcome, created_at) "
+                        "VALUES (?, ?, ?, ?, ?, 'queued', ?)",
+                        (str(uuid4()), batch_id, source_id, job_id, safe_name, now),
+                    )
+            if background:
+                self._job_wakeup.set()
+                return self.get_source(source_id), self.get_job(job_id), False
             try:
                 self._index_source(library_id, source_id, raw_path, job_id)
             except Exception as error:
@@ -610,7 +685,9 @@ class LoreDockService:
             self._set_job(job_id, "succeeded", 1.0)
         return self.get_source(source_id), self.get_job(job_id), False
 
-    def import_url(self, library_id: str, url: str) -> tuple[SourceRecord, JobRecord, bool]:
+    def import_url(
+        self, library_id: str, url: str, *, batch_id: str | None = None, background: bool = False
+    ) -> tuple[SourceRecord, JobRecord, bool]:
         self.get_library(library_id)
         try:
             snapshot = self.url_fetcher.fetch(url)
@@ -623,31 +700,130 @@ class LoreDockService:
             BytesIO(snapshot.content),
             source_kind="url",
             origin_url=snapshot.final_url,
+            batch_id=batch_id,
+            background=background,
         )
 
     def _set_source_status(self, source_id: str, status: str) -> None:
-        with self.database.transaction() as connection:
+        with self._lock, self.database.transaction() as connection:
             connection.execute(
                 "UPDATE sources SET status=?, updated_at=? WHERE id=?",
                 (status, utc_timestamp(), source_id),
             )
 
+    def _ensure_job_active(self, job_id: str) -> None:
+        with self._lock:
+            row = self.database.connection.execute(
+                "SELECT j.status, b.control_state FROM jobs j "
+                "LEFT JOIN import_batches b ON b.id=j.batch_id WHERE j.id=?",
+                (job_id,),
+            ).fetchone()
+        if row is None or row["status"] == "canceled" or self._job_stop.is_set():
+            raise JobCancelled
+        if row["control_state"] == "paused":
+            raise JobPaused
+
     def _index_source(self, library_id: str, source_id: str, raw_path: Path, job_id: str) -> None:
         paths = self.layout.library(library_id)
+        # Upload requests never inspect rebuildable index state. The worker serializes contract
+        # validation with every index writer so a partially initialized index cannot be mistaken
+        # for an incompatible one while the next file is being accepted.
+        with self._index_lock:
+            self._ensure_index_contract(library_id)
+        self._ensure_job_active(job_id)
         self._set_source_status(source_id, "parsing")
         self._set_job(job_id, "running", 0.25)
         parsed = parse_path(raw_path, source_id=source_id, allowed_root=paths.raw)
+        self._ensure_job_active(job_id)
         artifact_path = paths.artifacts / f"{source_id}.txt"
         artifact_path.write_text(parsed.text, encoding="utf-8")
         self._set_source_status(source_id, "chunking")
         self._set_job(job_id, "running", 0.5)
         hierarchy = chunk_document_hierarchy(parsed, self.chunking)
+        self._ensure_job_active(job_id)
         self._set_source_status(source_id, "embedding")
         self._set_job(job_id, "running", 0.7)
-        with HybridSearchIndex(paths.index, self.provider) as index:
-            index.replace_source(source_id, hierarchy.chunks, hierarchy.parents)
-        self._write_manifest(library_id)
+        with self._index_lock:
+            with HybridSearchIndex(paths.index, self.provider) as index:
+                index.replace_source(source_id, hierarchy.chunks, hierarchy.parents)
+            self._write_manifest(library_id)
+        self._ensure_job_active(job_id)
         self._set_job(job_id, "running", 0.9)
+
+    def _discard_source_derivatives(self, library_id: str, source_id: str) -> None:
+        paths = self.layout.library(library_id)
+        with self._index_lock:
+            if paths.index.exists():
+                with HybridSearchIndex(paths.index, self.provider) as index:
+                    index.delete_source(source_id)
+        (paths.artifacts / f"{source_id}.txt").unlink(missing_ok=True)
+
+    def _run_job_worker(self) -> None:
+        while not self._job_stop.is_set():
+            with self._lock:
+                row = self.database.lease_next_job(self._job_worker_id)
+            if row is None:
+                self._job_wakeup.clear()
+                self._job_wakeup.wait(timeout=0.5)
+                continue
+            job_id = str(row["id"])
+            source_id = str(row["source_id"])
+            try:
+                source = self.get_source(source_id)
+                raw_path = self.layout.source_raw_path(
+                    source.library_id, source.id, Path(source.name).suffix.lower()
+                )
+                if not raw_path.is_file():
+                    raise FileNotFoundError("The trusted source copy is missing.")
+                self._index_source(source.library_id, source.id, raw_path, job_id)
+            except (JobCancelled, JobPaused) as interruption:
+                try:
+                    source = self.get_source(source_id)
+                    self._discard_source_derivatives(source.library_id, source_id)
+                except AppError:
+                    pass
+                with self._lock, self.database.transaction() as connection:
+                    if self._job_stop.is_set() or isinstance(interruption, JobPaused):
+                        connection.execute(
+                            "UPDATE jobs SET status='pending', progress=0.1, lease_owner=NULL, "
+                            "lease_until=NULL, updated_at=? WHERE id=? AND status='running'",
+                            (utc_timestamp(), job_id),
+                        )
+                        connection.execute(
+                            "UPDATE sources SET status='pending', error=NULL, "
+                            "updated_at=? WHERE id=?",
+                            (utc_timestamp(), source_id),
+                        )
+                    else:
+                        connection.execute(
+                            "UPDATE sources SET status='canceled', error=NULL, "
+                            "updated_at=? WHERE id=?",
+                            (utc_timestamp(), source_id),
+                        )
+            except Exception as error:
+                message = str(error)[:1000]
+                with self._lock, self.database.transaction() as connection:
+                    connection.execute(
+                        "UPDATE sources SET status='failed', error=?, updated_at=? WHERE id=?",
+                        (message, utc_timestamp(), source_id),
+                    )
+                    connection.execute(
+                        "UPDATE jobs SET status='failed', progress=1, error=?, lease_owner=NULL, "
+                        "lease_until=NULL, updated_at=? WHERE id=? AND status='running'",
+                        (message, utc_timestamp(), job_id),
+                    )
+            else:
+                with self._lock, self.database.transaction() as connection:
+                    connection.execute(
+                        "UPDATE sources SET status='ready', error=NULL, updated_at=? WHERE id=?",
+                        (utc_timestamp(), source_id),
+                    )
+                    connection.execute(
+                        "UPDATE jobs SET status='succeeded', progress=1, error=NULL, "
+                        "lease_owner=NULL, lease_until=NULL, updated_at=? "
+                        "WHERE id=? AND status='running'",
+                        (utc_timestamp(), job_id),
+                    )
 
     def list_sources(self, library_id: str) -> list[SourceRecord]:
         self.get_library(library_id)
@@ -826,7 +1002,12 @@ class LoreDockService:
     def delete_source(self, source_id: str) -> None:
         source = self.get_source(source_id)
         paths = self.layout.library(source.library_id)
-        with self._lock:
+        with self._lock, self._index_lock:
+            self.database.connection.execute(
+                "UPDATE jobs SET status='canceled', lease_owner=NULL, lease_until=NULL, "
+                "updated_at=? WHERE source_id=? AND status IN ('pending', 'running')",
+                (utc_timestamp(), source_id),
+            )
             self._ensure_index_contract(source.library_id)
             if paths.index.exists():
                 with HybridSearchIndex(paths.index, self.provider) as index:
@@ -848,10 +1029,10 @@ class LoreDockService:
         index_path = self.layout.library(library_id).index
         if not index_path.exists():
             return []
-        with self._lock:
+        with self._lock, self._index_lock:
             self._ensure_index_contract(library_id)
-        with self._lock, HybridSearchIndex(index_path, self.provider) as index:
-            return index.search(normalized, limit=limit, lexical_only=lexical_only)
+            with HybridSearchIndex(index_path, self.provider) as index:
+                return index.search(normalized, limit=limit, lexical_only=lexical_only)
 
     def get_job(self, job_id: str) -> JobRecord:
         with self._lock:
@@ -862,11 +1043,202 @@ class LoreDockService:
             raise AppError("job_not_found", "The requested job does not exist.", status_code=404)
         return self._job(row)
 
+    @staticmethod
+    def _import_batch(row: sqlite3.Row) -> ImportBatchRecord:
+        job_count = int(row["job_count"])
+        item_count = int(row["item_count"])
+        duplicates = int(row["duplicate_items"])
+        succeeded = int(row["succeeded_items"])
+        failed = int(row["failed_items"])
+        canceled = int(row["canceled_items"])
+        completed = succeeded + duplicates + failed + canceled
+        control_state = str(row["control_state"])
+        if control_state == "canceled":
+            status = "canceled"
+        elif control_state == "paused":
+            status = "paused"
+        elif not bool(row["sealed"]):
+            status = "uploading"
+        elif completed < item_count:
+            status = "processing"
+        elif failed == 0 and canceled == 0 and item_count == int(row["expected_items"]):
+            status = "succeeded"
+        elif succeeded > 0 or duplicates > 0:
+            status = "partial"
+        else:
+            status = "failed"
+        return ImportBatchRecord(
+            id=str(row["id"]),
+            library_id=str(row["library_id"]),
+            name=str(row["name"]),
+            status=status,  # type: ignore[arg-type]
+            expected_items=int(row["expected_items"]),
+            job_count=job_count,
+            completed_items=completed,
+            succeeded_items=succeeded,
+            duplicate_items=duplicates,
+            failed_items=failed,
+            canceled_items=canceled,
+            created_at=str(row["created_at"]),
+            updated_at=str(row["updated_at"]),
+        )
+
+    def _import_batch_row(self, batch_id: str) -> sqlite3.Row:
+        row = self.database.connection.execute(
+            """
+            SELECT b.*,
+                COUNT(i.id) AS item_count,
+                COALESCE(SUM(i.outcome='queued'), 0) AS job_count,
+                COALESCE(SUM(i.outcome='duplicate'), 0) AS duplicate_items,
+                COALESCE(SUM(i.outcome='queued' AND j.status='succeeded'), 0)
+                    AS succeeded_items,
+                COALESCE(SUM(i.outcome='queued' AND j.status='failed'), 0) AS failed_items,
+                COALESCE(SUM(i.outcome='queued' AND j.status='canceled'), 0) AS canceled_items
+            FROM import_batches b
+            LEFT JOIN import_batch_items i ON i.batch_id=b.id
+            LEFT JOIN jobs j ON j.id=i.job_id
+            WHERE b.id=? GROUP BY b.id
+            """,
+            (batch_id,),
+        ).fetchone()
+        if row is None:
+            raise AppError(
+                "import_batch_not_found", "The import batch does not exist.", status_code=404
+            )
+        return row
+
+    def create_import_batch(
+        self, library_id: str, name: str, expected_items: int
+    ) -> ImportBatchRecord:
+        self.get_library(library_id)
+        normalized = " ".join(name.split())
+        if not normalized or len(normalized) > 200 or not 1 <= expected_items <= 500:
+            raise AppError("invalid_import_batch", "The import batch is invalid.")
+        batch_id = str(uuid4())
+        now = utc_timestamp()
+        with self._lock, self.database.transaction() as connection:
+            connection.execute(
+                "INSERT INTO import_batches("
+                "id, library_id, name, expected_items, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (batch_id, library_id, normalized, expected_items, now, now),
+            )
+        return self.get_import_batch(batch_id)
+
+    def get_import_batch(self, batch_id: str) -> ImportBatchRecord:
+        with self._lock:
+            return self._import_batch(self._import_batch_row(batch_id))
+
+    def list_import_batches(self, library_id: str, *, limit: int = 20) -> list[ImportBatchRecord]:
+        self.get_library(library_id)
+        with self._lock:
+            ids = self.database.connection.execute(
+                "SELECT id FROM import_batches WHERE library_id=? "
+                "ORDER BY created_at DESC, id DESC LIMIT ?",
+                (library_id, limit),
+            ).fetchall()
+            return [self._import_batch(self._import_batch_row(str(row["id"]))) for row in ids]
+
+    def seal_import_batch(self, batch_id: str) -> ImportBatchRecord:
+        self.get_import_batch(batch_id)
+        with self._lock, self.database.transaction() as connection:
+            connection.execute(
+                "UPDATE import_batches SET sealed=1, updated_at=? WHERE id=?",
+                (utc_timestamp(), batch_id),
+            )
+        self._job_wakeup.set()
+        return self.get_import_batch(batch_id)
+
+    def pause_import_batch(self, batch_id: str) -> ImportBatchRecord:
+        batch = self.get_import_batch(batch_id)
+        if batch.status not in {"uploading", "processing"}:
+            raise AppError(
+                "import_batch_not_pauseable", "The import batch cannot be paused.", status_code=409
+            )
+        with self._lock, self.database.transaction() as connection:
+            connection.execute(
+                "UPDATE import_batches SET control_state='paused', updated_at=? WHERE id=?",
+                (utc_timestamp(), batch_id),
+            )
+        return self.get_import_batch(batch_id)
+
+    def resume_import_batch(self, batch_id: str) -> ImportBatchRecord:
+        batch = self.get_import_batch(batch_id)
+        if batch.status != "paused":
+            raise AppError(
+                "import_batch_not_resumable", "The import batch is not paused.", status_code=409
+            )
+        with self._lock, self.database.transaction() as connection:
+            connection.execute(
+                "UPDATE import_batches SET control_state='active', updated_at=? WHERE id=?",
+                (utc_timestamp(), batch_id),
+            )
+        self._job_wakeup.set()
+        return self.get_import_batch(batch_id)
+
+    def cancel_import_batch(self, batch_id: str) -> ImportBatchRecord:
+        batch = self.get_import_batch(batch_id)
+        if batch.status in {"succeeded", "failed", "partial", "canceled"}:
+            raise AppError(
+                "import_batch_not_cancelable",
+                "The import batch cannot be canceled.",
+                status_code=409,
+            )
+        now = utc_timestamp()
+        with self._lock, self.database.transaction() as connection:
+            connection.execute(
+                "UPDATE import_batches SET sealed=1, control_state='canceled', "
+                "updated_at=? WHERE id=?",
+                (now, batch_id),
+            )
+            connection.execute(
+                "UPDATE jobs SET status='canceled', error=NULL, lease_owner=NULL, "
+                "lease_until=NULL, "
+                "updated_at=? WHERE batch_id=? AND status IN ('pending', 'running')",
+                (now, batch_id),
+            )
+            connection.execute(
+                "UPDATE sources SET status='canceled', error=NULL, updated_at=? WHERE id IN "
+                "(SELECT source_id FROM jobs WHERE batch_id=? AND status='canceled')",
+                (now, batch_id),
+            )
+        return self.get_import_batch(batch_id)
+
+    def retry_import_batch(self, batch_id: str) -> ImportBatchRecord:
+        batch = self.get_import_batch(batch_id)
+        if batch.status not in {"failed", "partial", "canceled"}:
+            raise AppError(
+                "import_batch_not_retryable", "The import batch cannot be retried.", status_code=409
+            )
+        now = utc_timestamp()
+        with self._lock, self.database.transaction() as connection:
+            connection.execute(
+                "UPDATE import_batches SET control_state='active', sealed=1, "
+                "updated_at=? WHERE id=?",
+                (now, batch_id),
+            )
+            connection.execute(
+                "UPDATE jobs SET status='pending', progress=0.1, error=NULL, lease_owner=NULL, "
+                "lease_until=NULL, updated_at=? WHERE batch_id=? "
+                "AND status IN ('failed', 'canceled') "
+                "AND attempts < 3",
+                (now, batch_id),
+            )
+            connection.execute(
+                "UPDATE sources SET status='pending', error=NULL, updated_at=? WHERE id IN "
+                "(SELECT source_id FROM jobs WHERE batch_id=? AND status='pending')",
+                (now, batch_id),
+            )
+        self._job_wakeup.set()
+        return self.get_import_batch(batch_id)
+
     def retry_job(self, job_id: str) -> JobRecord:
         job = self.get_job(job_id)
-        if job.status != "failed" or job.source_id is None:
+        if job.status not in {"failed", "canceled"} or job.source_id is None:
             raise AppError(
-                "job_not_retryable", "Only failed source jobs can be retried.", status_code=409
+                "job_not_retryable",
+                "Only failed or canceled source jobs can be retried.",
+                status_code=409,
             )
         if job.attempts >= 3:
             raise AppError(
@@ -883,8 +1255,8 @@ class LoreDockService:
         with self._lock, self.database.transaction() as connection:
             connection.execute(
                 """
-                UPDATE jobs SET status='running', attempts=attempts+1, progress=0.1,
-                    error=NULL, updated_at=? WHERE id=?
+                UPDATE jobs SET status='pending', progress=0.1, error=NULL,
+                    lease_owner=NULL, lease_until=NULL, updated_at=? WHERE id=?
                 """,
                 (utc_timestamp(), job_id),
             )
@@ -892,18 +1264,27 @@ class LoreDockService:
                 "UPDATE sources SET status='pending', error=NULL, updated_at=? WHERE id=?",
                 (utc_timestamp(), source.id),
             )
-        try:
-            self._index_source(source.library_id, source.id, raw_path, job_id)
-        except Exception as error:
-            message = str(error)[:1000]
-            self._set_job(job_id, "failed", 1.0, error=message)
-            raise AppError("source_index_failed", "The document could not be indexed.") from error
+        self._job_wakeup.set()
+        return self.get_job(job_id)
+
+    def cancel_job(self, job_id: str) -> JobRecord:
+        job = self.get_job(job_id)
+        if job.status not in {"pending", "running"} or job.source_id is None:
+            raise AppError(
+                "job_not_cancelable",
+                "Only pending or running source jobs can be canceled.",
+                status_code=409,
+            )
         with self._lock, self.database.transaction() as connection:
             connection.execute(
-                "UPDATE sources SET status='ready', updated_at=? WHERE id=?",
-                (utc_timestamp(), source.id),
+                "UPDATE jobs SET status='canceled', error=NULL, lease_owner=NULL, "
+                "lease_until=NULL, updated_at=? WHERE id=? AND status IN ('pending', 'running')",
+                (utc_timestamp(), job_id),
             )
-        self._set_job(job_id, "succeeded", 1.0)
+            connection.execute(
+                "UPDATE sources SET status='canceled', error=NULL, updated_at=? WHERE id=?",
+                (utc_timestamp(), job.source_id),
+            )
         return self.get_job(job_id)
 
     def latest_job_for_source(self, source_id: str) -> JobRecord:

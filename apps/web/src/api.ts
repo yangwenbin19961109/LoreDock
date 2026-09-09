@@ -6,6 +6,8 @@ import {
   type HealthResponse,
   type Job,
   type JobId,
+  type ImportBatch,
+  type ImportBatchId,
   type Library,
   type LibraryCreateRequest,
   type LibraryId,
@@ -147,22 +149,28 @@ export const coreApi = {
   importSource(
     libraryId: LibraryId,
     file: File,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    batchId?: ImportBatchId
   ): Promise<SourceImportResponse> {
     const body = new FormData()
     body.append('file', file)
-    return request<SourceImportResponse>(`libraries/${libraryId}/sources`, {
+    const query = batchId ? `?batch_id=${encodeURIComponent(batchId)}` : ''
+    return request<SourceImportResponse>(`libraries/${libraryId}/sources${query}`, {
       method: 'POST',
       body,
       signal
     })
   },
 
-  importUrl(libraryId: LibraryId, url: string): Promise<SourceImportResponse> {
+  importUrl(
+    libraryId: LibraryId,
+    url: string,
+    batchId?: ImportBatchId
+  ): Promise<SourceImportResponse> {
     return request<SourceImportResponse>(`libraries/${libraryId}/url-sources`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url })
+      body: JSON.stringify({ url, batch_id: batchId })
     })
   },
 
@@ -195,5 +203,49 @@ export const coreApi = {
 
   retryJob(jobId: JobId): Promise<Job> {
     return request<Job>(`jobs/${jobId}/retry`, { method: 'POST' })
+  },
+
+  cancelJob(jobId: JobId): Promise<Job> {
+    return request<Job>(`jobs/${jobId}/cancel`, { method: 'POST' })
+  },
+
+  createImportBatch(
+    libraryId: LibraryId,
+    name: string,
+    expectedItems: number
+  ): Promise<ImportBatch> {
+    return request<ImportBatch>(`libraries/${libraryId}/import-batches`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, expected_items: expectedItems })
+    })
+  },
+
+  listImportBatches(libraryId: LibraryId): Promise<Page<ImportBatch>> {
+    return request<Page<ImportBatch>>(`libraries/${libraryId}/import-batches?limit=20`)
+  },
+
+  getImportBatch(batchId: ImportBatchId): Promise<ImportBatch> {
+    return request<ImportBatch>(`import-batches/${batchId}`)
+  },
+
+  sealImportBatch(batchId: ImportBatchId): Promise<ImportBatch> {
+    return request<ImportBatch>(`import-batches/${batchId}/seal`, { method: 'POST' })
+  },
+
+  pauseImportBatch(batchId: ImportBatchId): Promise<ImportBatch> {
+    return request<ImportBatch>(`import-batches/${batchId}/pause`, { method: 'POST' })
+  },
+
+  resumeImportBatch(batchId: ImportBatchId): Promise<ImportBatch> {
+    return request<ImportBatch>(`import-batches/${batchId}/resume`, { method: 'POST' })
+  },
+
+  cancelImportBatch(batchId: ImportBatchId): Promise<ImportBatch> {
+    return request<ImportBatch>(`import-batches/${batchId}/cancel`, { method: 'POST' })
+  },
+
+  retryImportBatch(batchId: ImportBatchId): Promise<ImportBatch> {
+    return request<ImportBatch>(`import-batches/${batchId}/retry`, { method: 'POST' })
   }
 }

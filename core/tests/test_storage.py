@@ -14,7 +14,7 @@ def test_migration_is_retry_safe(tmp_path: Path) -> None:
     version = second.connection.execute("PRAGMA user_version").fetchone()[0]
     second.close()
 
-    assert version == 6
+    assert version == 7
 
 
 def test_settings_migration_has_safe_defaults(tmp_path: Path) -> None:
@@ -43,7 +43,7 @@ def test_schema_two_migrates_to_settings_without_reset(tmp_path: Path) -> None:
     settings = database.connection.execute("SELECT theme FROM app_settings WHERE id=1").fetchone()
     database.close()
 
-    assert version == 6
+    assert version == 7
     assert settings is not None
     assert settings["theme"] == "system"
 
@@ -82,7 +82,7 @@ def test_schema_five_adds_source_origin_without_changing_existing_rows(tmp_path:
         "SELECT source_kind, origin_url, name FROM sources WHERE id='source'"
     ).fetchone()
 
-    assert database.connection.execute("PRAGMA user_version").fetchone()[0] == 6
+    assert database.connection.execute("PRAGMA user_version").fetchone()[0] == 7
     assert row is not None
     assert tuple(row) == ("file", None, "guide.md")
     database.close()
@@ -110,7 +110,7 @@ def test_running_model_job_is_recovered_as_pending(tmp_path: Path) -> None:
     assert status == "pending"
 
 
-def test_running_jobs_are_recovered_as_failed(tmp_path: Path) -> None:
+def test_running_jobs_are_recovered_as_pending(tmp_path: Path) -> None:
     database = AppDatabase(tmp_path / "app.sqlite")
     now = utc_timestamp()
     with database.transaction() as connection:
@@ -128,7 +128,42 @@ def test_running_jobs_are_recovered_as_failed(tmp_path: Path) -> None:
     status = database.connection.execute("SELECT status FROM jobs WHERE id='job'").fetchone()[0]
     database.close()
 
-    assert status == "failed"
+    assert status == "pending"
+
+
+def test_interrupted_source_job_at_retry_limit_is_failed(tmp_path: Path) -> None:
+    database = AppDatabase(tmp_path / "app.sqlite")
+    now = utc_timestamp()
+    with database.transaction() as connection:
+        connection.execute("INSERT INTO libraries VALUES ('lib', 'Library', ?, ?)", (now, now))
+        connection.execute(
+            """
+            INSERT INTO sources(
+                id, library_id, name, media_type, suffix, status, content_hash,
+                size_bytes, source_kind, origin_url, created_at, updated_at
+            ) VALUES ('source', 'lib', 'a.txt', 'text/plain', '.txt', 'parsing',
+                'hash', 1, 'file', NULL, ?, ?)
+            """,
+            (now, now),
+        )
+        connection.execute(
+            """
+            INSERT INTO jobs(
+                id, library_id, source_id, kind, status, attempts, progress, created_at, updated_at
+            ) VALUES ('job', 'lib', 'source', 'index_source', 'running', 3, 0.5, ?, ?)
+            """,
+            (now, now),
+        )
+
+    assert database.recover_interrupted_jobs() == 1
+    job = database.connection.execute("SELECT status, error FROM jobs WHERE id='job'").fetchone()
+    source = database.connection.execute(
+        "SELECT status, error FROM sources WHERE id='source'"
+    ).fetchone()
+    database.close()
+
+    assert job is not None and job["status"] == "failed" and "retry limit" in job["error"]
+    assert source is not None and source["status"] == "failed" and source["error"]
 
 
 def test_layout_rejects_invalid_identifiers(tmp_path: Path) -> None:

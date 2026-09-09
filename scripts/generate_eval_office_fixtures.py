@@ -1,4 +1,4 @@
-"""Generate deterministic, redistributable PDF and DOCX retrieval fixtures."""
+"""Generate deterministic, redistributable Office and PDF retrieval fixtures."""
 
 from __future__ import annotations
 
@@ -8,21 +8,23 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from docx import Document
-from docx.enum.section import WD_SECTION
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
-from reportlab.lib.colors import HexColor
-from reportlab.lib.enums import TA_CENTER
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-from reportlab.lib.units import inch
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "evals" / "fixtures" / "documents"
+
+
+def _write_deterministic_zip(path: Path, members: dict[str, bytes]) -> None:
+    with zipfile.ZipFile(
+        path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9
+    ) as archive:
+        for name in sorted(members):
+            info = zipfile.ZipInfo(name, date_time=(2026, 9, 8, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o600 << 16
+            archive.writestr(info, members[name])
 
 
 def _set_word_font(run: object, name: str, size: float, *, bold: bool = False) -> None:
@@ -106,6 +108,15 @@ def build_docx(path: Path) -> None:
 
 
 def build_pdf(path: Path) -> None:
+    from reportlab.lib.colors import HexColor
+    from reportlab.lib.enums import TA_CENTER
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import inch
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer
+
     noto_path = Path(r"C:\Windows\Fonts\NotoSansSC-VF.ttf")
     if not noto_path.exists():
         raise RuntimeError("Noto Sans SC is required to regenerate the PDF fixture")
@@ -179,10 +190,86 @@ def build_pdf(path: Path) -> None:
     document.build(story)
 
 
+def build_pptx(path: Path) -> None:
+    presentation = (
+        b'<p:presentation xmlns:p="http://schemas.openxmlformats.org/'
+        b'presentationml/2006/main" xmlns:r="http://schemas.openxmlformats.org/'
+        b'officeDocument/2006/relationships"><p:sldIdLst><p:sldId id="256" '
+        b'r:id="rId1"/><p:sldId id="257" r:id="rId2"/></p:sldIdLst>'
+        b'</p:presentation>'
+    )
+    relationships = (
+        b'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/'
+        b'relationships"><Relationship Id="rId1" Type="http://schemas.'
+        b'openxmlformats.org/officeDocument/2006/relationships/slide" '
+        b'Target="slides/slide1.xml"/><Relationship Id="rId2" Type="http://'
+        b'schemas.openxmlformats.org/officeDocument/2006/relationships/slide" '
+        b'Target="slides/slide2.xml"/></Relationships>'
+    )
+    slides = (
+        b'<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/'
+        b'main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
+        b'<p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>Release gate '
+        b'ALPHA-27 requires citation checks before publishing.</a:t></a:r></a:p>'
+        b'</p:txBody></p:sp></p:spTree></p:cSld></p:sld>',
+        b'<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/'
+        b'main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" '
+        b'show="0"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>Hidden '
+        b'review marker BRAVO-42 keeps the previous index available.</a:t></a:r>'
+        b'</a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>',
+    )
+    members = {
+        "ppt/presentation.xml": presentation,
+        "ppt/_rels/presentation.xml.rels": relationships,
+    }
+    members.update(
+        {f"ppt/slides/slide{index}.xml": slide for index, slide in enumerate(slides, 1)}
+    )
+    _write_deterministic_zip(path, members)
+
+
+def build_xlsx(path: Path) -> None:
+    workbook = (
+        b'<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/'
+        b'main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/'
+        b'relationships"><sheets><sheet name="Summary" sheetId="1" r:id="rId1"/>'
+        b'<sheet name="Archive" sheetId="2" state="hidden" r:id="rId2"/>'
+        b'</sheets></workbook>'
+    )
+    relationships = (
+        b'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/'
+        b'relationships"><Relationship Id="rId1" Type="http://schemas.'
+        b'openxmlformats.org/officeDocument/2006/relationships/worksheet" '
+        b'Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://'
+        b'schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" '
+        b'Target="worksheets/sheet2.xml"/></Relationships>'
+    )
+    sheets = (
+        b'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/'
+        b'main"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Policy'
+        b'</t></is></c><c r="B1" t="inlineStr"><is><t>Retention</t></is></c>'
+        b'</row><row r="2"><c r="A2" t="inlineStr"><is><t>DELTA-19</t></is>'
+        b'</c><c r="B2"><v>45</v></c></row></sheetData></worksheet>',
+        b'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/'
+        b'main"><sheetData><row r="3"><c r="C3" t="inlineStr"><is><t>Archive '
+        b'marker ECHO-73</t></is></c></row></sheetData></worksheet>',
+    )
+    members = {
+        "xl/workbook.xml": workbook,
+        "xl/_rels/workbook.xml.rels": relationships,
+    }
+    members.update(
+        {f"xl/worksheets/sheet{index}.xml": sheet for index, sheet in enumerate(sheets, 1)}
+    )
+    _write_deterministic_zip(path, members)
+
+
 def main() -> None:
     OUTPUT.mkdir(parents=True, exist_ok=True)
     build_docx(OUTPUT / "model-handbook.docx")
     build_pdf(OUTPUT / "recovery-guide.pdf")
+    build_pptx(OUTPUT / "office-slides.pptx")
+    build_xlsx(OUTPUT / "office-workbook.xlsx")
 
 
 if __name__ == "__main__":

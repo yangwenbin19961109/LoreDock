@@ -2,6 +2,8 @@
 
 import json
 import tempfile
+import time
+from collections import Counter
 from dataclasses import asdict
 from pathlib import Path
 from typing import TypedDict, cast
@@ -36,6 +38,14 @@ def _string_list(value: object, field: str) -> list[str]:
     if not all(isinstance(item, str) for item in items):
         raise ValueError(f"{field} must be an array of strings")
     return cast(list[str], items)
+
+
+def _percentile(values: list[float], percentile: float) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    index = min(round((len(ordered) - 1) * percentile), len(ordered) - 1)
+    return ordered[index]
 
 
 def load_cases(path: Path) -> list[EvaluationCase]:
@@ -90,12 +100,18 @@ def run_evaluation(
     context_lengths: list[list[int]] = []
     context_ids: list[list[str]] = []
     case_details: list[dict[str, object]] = []
+    query_latencies_ms: list[float] = []
+    index_build_seconds = 0.0
+    index_bytes = 0
     with (
         tempfile.TemporaryDirectory(prefix="loredock-eval-") as directory,
         HybridSearchIndex(Path(directory) / "index.sqlite", active_provider) as index,
     ):
+        build_started = time.perf_counter()
         index.add(chunks, parents)
+        index_build_seconds = time.perf_counter() - build_started
         for case in cases:
+            query_started = time.perf_counter()
             results = index.search(
                 case["query"],
                 limit=limit,
@@ -103,6 +119,7 @@ def run_evaluation(
                 vector_only=vector_only,
                 context_strategy=context_strategy,
             )
+            query_latencies_ms.append((time.perf_counter() - query_started) * 1000)
             expected.append(set(case["expected_sources"]))
             retrieved.append([result.source_id for result in results])
             citation_checks.append(
@@ -151,6 +168,7 @@ def run_evaluation(
             case_details.append(
                 {
                     "id": case["id"],
+                    "tags": case["tags"],
                     "query": case["query"],
                     "expected_sources": case["expected_sources"],
                     "retrieved_sources": [result.source_id for result in results],
@@ -163,6 +181,11 @@ def run_evaluation(
                     ],
                 }
             )
+        index_bytes = sum(
+            candidate.stat().st_size
+            for candidate in (index.path, Path(f"{index.path}-wal"), Path(f"{index.path}-shm"))
+            if candidate.is_file()
+        )
     metrics = calculate_metrics(
         expected,
         retrieved,
@@ -178,11 +201,18 @@ def run_evaluation(
         "dimensions": active_provider.dimensions,
         "documents": len(documents),
         "chunks": len(chunks),
+        "index_build_seconds": index_build_seconds,
+        "index_bytes": index_bytes,
+        "query_p50_ms": _percentile(query_latencies_ms, 0.5),
+        "query_p95_ms": _percentile(query_latencies_ms, 0.95),
         "chunking": asdict(config),
         "candidate_limit": 50,
         "rrf_k": 60,
         "result_limit": limit,
         "context_strategy": context_strategy,
+        "tag_case_counts": dict(
+            sorted(Counter(tag for case in cases for tag in case["tags"]).items())
+        ),
         "cases_detail": case_details,
     }
     return metrics, details

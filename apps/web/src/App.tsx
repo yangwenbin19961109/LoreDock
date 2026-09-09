@@ -4,7 +4,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type {
   AppSettings,
   CitationRange,
+  ImportBatch,
+  ImportBatchId,
   Job,
+  JobId,
   Library,
   LibraryId,
   ModelStatus,
@@ -32,14 +35,59 @@ type DetailTab = 'preview' | 'details'
 type SourceSort = NonNullable<SourceListOptions['sort']>
 
 interface ImportProgressState {
+  readonly batchId?: ImportBatchId
   readonly total: number
   readonly completed: number
   readonly currentName: string
-  readonly status: 'running' | 'succeeded' | 'partial' | 'failed' | 'canceled'
+  readonly status:
+    'running' | 'processing' | 'paused' | 'succeeded' | 'partial' | 'failed' | 'canceled'
   readonly succeeded?: number
   readonly duplicates?: number
   readonly failed?: number
   readonly skipped?: number
+  readonly jobIds?: readonly JobId[]
+  readonly sourceIds?: readonly SourceId[]
+  readonly uploadFailures?: number
+}
+
+function progressFromBatch(batch: ImportBatch): ImportProgressState {
+  return {
+    batchId: batch.id,
+    total: batch.expected_items,
+    completed: batch.completed_items,
+    currentName: batch.name,
+    status: batch.status === 'uploading' ? 'running' : batch.status,
+    succeeded: batch.succeeded_items,
+    duplicates: batch.duplicate_items,
+    failed: batch.failed_items,
+    skipped: 0
+  }
+}
+
+function initialQueueState(
+  imported: readonly SourceImportResponse[],
+  uploadFailures = 0
+): Pick<ImportProgressState, 'status' | 'completed' | 'succeeded' | 'failed'> {
+  const active = imported.filter((item) => ['pending', 'running'].includes(item.job.status)).length
+  const failed = imported.filter((item) => item.job.status === 'failed').length + uploadFailures
+  const canceled = imported.filter((item) => item.job.status === 'canceled').length
+  const succeeded = imported.filter((item) => item.job.status === 'succeeded').length
+  const completed = imported.length - active
+  return {
+    completed,
+    succeeded,
+    failed,
+    status:
+      active > 0
+        ? 'processing'
+        : canceled > 0
+          ? 'canceled'
+          : failed > 0
+            ? succeeded > 0
+              ? 'partial'
+              : 'failed'
+            : 'succeeded'
+  }
 }
 
 const SOURCE_PAGE_SIZE = 10
@@ -68,6 +116,7 @@ function sourceStatus(status: string): string {
     parsing: '正在解析',
     chunking: '正在分块',
     embedding: '正在索引',
+    canceled: '已取消',
     succeeded: '可以搜索',
     ready: '可以搜索',
     failed: '处理失败'
@@ -131,9 +180,34 @@ export function App() {
   const activeModelJobId =
     modelJob && ['pending', 'running'].includes(modelJob.status) ? modelJob.id : undefined
   const activeJobs = useMemo(
-    () => Object.values(jobs).filter((job) => !['succeeded', 'failed'].includes(job.status)),
+    () => Object.values(jobs).filter((job) => ['pending', 'running'].includes(job.status)),
     [jobs]
   )
+
+  useEffect(() => {
+    if (!selectedId || coreState !== 'ready') return
+    void coreApi
+      .listImportBatches(selectedId)
+      .then((page) => {
+        const latest = page.items[0]
+        if (latest) setImportProgress(progressFromBatch(latest))
+      })
+      .catch(() => undefined)
+  }, [coreState, selectedId])
+
+  useEffect(() => {
+    const batchId = importProgress?.batchId
+    if (!batchId || !['processing', 'paused'].includes(importProgress.status)) return
+    const timer = window.setInterval(() => {
+      void coreApi.getImportBatch(batchId).then((batch) => {
+        setImportProgress(progressFromBatch(batch))
+        if (!['processing', 'paused', 'uploading'].includes(batch.status)) {
+          setSourceListRevision((revision) => revision + 1)
+        }
+      })
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [importProgress?.batchId, importProgress?.status])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -328,6 +402,8 @@ export function App() {
     if (activeJobs.length === 0) return
     const timer = window.setInterval(() => {
       void Promise.all(activeJobs.map((job) => coreApi.getJob(job.id))).then((updated) => {
+        const mergedJobs = new Map(Object.values(jobs).map((job) => [job.id, job]))
+        for (const job of updated) mergedJobs.set(job.id, job)
         setJobs((current) => {
           const next = { ...current }
           for (const job of updated) {
@@ -335,10 +411,51 @@ export function App() {
           }
           return next
         })
+        if (importProgress?.status !== 'processing' || !importProgress.jobIds?.length) return
+        const batchJobs = importProgress.jobIds
+          .map((jobId) => mergedJobs.get(jobId))
+          .filter((job): job is Job => Boolean(job))
+        if (batchJobs.length !== importProgress.jobIds.length) return
+        const completed = batchJobs.filter((job) =>
+          ['succeeded', 'failed', 'canceled'].includes(job.status)
+        ).length
+        const failed = batchJobs.filter((job) => job.status === 'failed').length
+        const canceled = batchJobs.filter((job) => job.status === 'canceled').length
+        const succeeded = batchJobs.filter((job) => job.status === 'succeeded').length
+        if (completed < batchJobs.length) {
+          setImportProgress((current) =>
+            current?.status === 'processing' ? { ...current, completed } : current
+          )
+          return
+        }
+        const uploadFailures = importProgress.uploadFailures ?? 0
+        setImportProgress((current) =>
+          current?.status === 'processing'
+            ? {
+                ...current,
+                completed,
+                succeeded,
+                failed: failed + uploadFailures,
+                status:
+                  canceled > 0
+                    ? 'canceled'
+                    : failed + uploadFailures > 0
+                      ? completed > failed
+                        ? 'partial'
+                        : 'failed'
+                      : 'succeeded'
+              }
+            : current
+        )
+        if (selectedId) {
+          setSourceListRevision((revision) => revision + 1)
+          const firstSourceId = importProgress.sourceIds?.[0]
+          if (firstSourceId && succeeded > 0) selectSource(firstSourceId)
+        }
       })
     }, 1000)
     return () => window.clearInterval(timer)
-  }, [activeJobs])
+  }, [activeJobs, importProgress, jobs, selectedId])
 
   function resetSelection(): void {
     setSelectedSourceId(undefined)
@@ -498,7 +615,14 @@ export function App() {
       currentName: selectedFiles[0]?.name ?? '',
       status: 'running'
     })
+    let batchId: ImportBatchId | undefined
     try {
+      const batch = await coreApi.createImportBatch(
+        selectedId,
+        selectedFiles.length === 1 ? selectedFiles[0]!.name : `${selectedFiles.length} 份资料`,
+        selectedFiles.length
+      )
+      batchId = batch.id
       const imported: SourceImportResponse[] = []
       for (const [index, file] of selectedFiles.entries()) {
         setImportProgress({
@@ -507,7 +631,7 @@ export function App() {
           currentName: file.name,
           status: 'running'
         })
-        imported.push(await coreApi.importSource(selectedId, file))
+        imported.push(await coreApi.importSource(selectedId, file, undefined, batchId))
         setImportProgress({
           total: selectedFiles.length,
           completed: index + 1,
@@ -527,9 +651,10 @@ export function App() {
       setSourceCursor(undefined)
       setSourceCursorHistory([])
       setNextSourceCursor(page.page.next_cursor ?? undefined)
-      const firstSourceId = imported[0]?.source.id ?? page.items[0]?.id
-      if (firstSourceId) selectSource(firstSourceId)
+      setImportProgress(progressFromBatch(await coreApi.sealImportBatch(batchId)))
+      if (imported[0]?.job.status === 'succeeded') selectSource(imported[0].source.id)
     } catch (reason) {
+      if (batchId) void coreApi.sealImportBatch(batchId).catch(() => undefined)
       setImportProgress((current) => (current ? { ...current, status: 'failed' } : current))
       setError(reason instanceof Error ? reason.message : '资料导入失败。')
     } finally {
@@ -549,6 +674,58 @@ export function App() {
     folderImportController.current?.abort()
   }
 
+  async function cancelQueuedImport(): Promise<void> {
+    if (importProgress?.batchId) {
+      try {
+        setImportProgress(
+          progressFromBatch(await coreApi.cancelImportBatch(importProgress.batchId))
+        )
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : '停止导入任务失败。')
+      }
+      return
+    }
+    if (importProgress?.status !== 'processing' || !importProgress.jobIds?.length) return
+    const cancelable = importProgress.jobIds.filter((jobId) => {
+      const job = Object.values(jobs).find((candidate) => candidate.id === jobId)
+      return job && ['pending', 'running'].includes(job.status)
+    })
+    try {
+      const canceled = await Promise.all(cancelable.map((jobId) => coreApi.cancelJob(jobId)))
+      setJobs((current) => {
+        const next = { ...current }
+        for (const job of canceled) {
+          if (job.source_id) next[job.source_id] = job
+        }
+        return next
+      })
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '停止导入任务失败。')
+    }
+  }
+
+  async function pauseOrResumeBatch(): Promise<void> {
+    if (!importProgress?.batchId) return
+    try {
+      const batch =
+        importProgress.status === 'paused'
+          ? await coreApi.resumeImportBatch(importProgress.batchId)
+          : await coreApi.pauseImportBatch(importProgress.batchId)
+      setImportProgress(progressFromBatch(batch))
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '更新批次状态失败。')
+    }
+  }
+
+  async function retryBatch(): Promise<void> {
+    if (!importProgress?.batchId) return
+    try {
+      setImportProgress(progressFromBatch(await coreApi.retryImportBatch(importProgress.batchId)))
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '重试批次失败。')
+    }
+  }
+
   async function importFolder(planOverride?: FolderImportPlan): Promise<void> {
     const plan = planOverride ?? folderPlan
     if (!selectedId || !plan || plan.blockedReason || plan.files.length === 0) return
@@ -563,6 +740,14 @@ export function App() {
     let failed = 0
     const imported: SourceImportResponse[] = []
     const failedFiles: FolderImportPlan['files'][number][] = []
+    let batchId: ImportBatchId
+    try {
+      batchId = (await coreApi.createImportBatch(selectedId, plan.folderName, plan.files.length)).id
+    } catch (reason) {
+      setBusy(false)
+      setError(reason instanceof Error ? reason.message : '创建导入批次失败。')
+      return
+    }
     setImportProgress({
       total: plan.files.length,
       completed: 0,
@@ -584,7 +769,7 @@ export function App() {
         skipped: plan.skipped.length
       })
       try {
-        const result = await coreApi.importSource(selectedId, item.file, controller.signal)
+        const result = await coreApi.importSource(selectedId, item.file, controller.signal, batchId)
         imported.push(result)
         if (result.duplicate) duplicates += 1
         else succeeded += 1
@@ -617,22 +802,24 @@ export function App() {
         totalBytes: retryFiles.reduce((sum, item) => sum + item.file.size, 0)
       })
     }
+    const queueState = initialQueueState(imported, failed)
     const finalStatus = canceled
       ? 'canceled'
       : failed > 0
         ? succeeded + duplicates > 0
           ? 'partial'
           : 'failed'
-        : 'succeeded'
+        : queueState.status
+    const persistedBatch = canceled
+      ? await coreApi.cancelImportBatch(batchId)
+      : await coreApi.sealImportBatch(batchId)
     setImportProgress({
-      total: plan.files.length,
-      completed,
-      currentName: plan.folderName,
-      status: finalStatus,
-      succeeded,
-      duplicates,
-      failed,
-      skipped: plan.skipped.length
+      ...progressFromBatch(persistedBatch),
+      status: finalStatus === 'processing' ? progressFromBatch(persistedBatch).status : finalStatus,
+      skipped: plan.skipped.length,
+      uploadFailures: failed,
+      jobIds: imported.map((item) => item.job.id),
+      sourceIds: imported.map((item) => item.source.id)
     })
     folderImportController.current = undefined
 
@@ -651,8 +838,6 @@ export function App() {
       setSourceCursor(undefined)
       setSourceCursorHistory([])
       setNextSourceCursor(page.page.next_cursor ?? undefined)
-      const firstSourceId = imported[0]?.source.id ?? page.items[0]?.id
-      if (firstSourceId) selectSource(firstSourceId)
       if (failed > 0) {
         setError(`${failed} 份资料导入失败，其余资料已保留。可以检查文件后单独重试。`)
       }
@@ -670,8 +855,10 @@ export function App() {
     setBusy(true)
     setError(undefined)
     setImportProgress({ total: 1, completed: 0, currentName: url, status: 'running' })
+    let batchId: ImportBatchId | undefined
     try {
-      const imported = await coreApi.importUrl(selectedId, url)
+      batchId = (await coreApi.createImportBatch(selectedId, url, 1)).id
+      const imported = await coreApi.importUrl(selectedId, url, batchId)
       setJobs((current) => ({ ...current, [imported.source.id]: imported.job }))
       const page = await coreApi.listSources(selectedId, { limit: SOURCE_PAGE_SIZE })
       setSources(page.items)
@@ -680,16 +867,12 @@ export function App() {
       setSourceCursor(undefined)
       setSourceCursorHistory([])
       setNextSourceCursor(page.page.next_cursor ?? undefined)
-      setImportProgress({
-        total: 1,
-        completed: 1,
-        currentName: imported.source.name,
-        status: 'succeeded'
-      })
+      setImportProgress(progressFromBatch(await coreApi.sealImportBatch(batchId)))
       setSourceUrl('')
       setShowUrlImport(false)
-      selectSource(imported.source.id)
+      if (imported.job.status === 'succeeded') selectSource(imported.source.id)
     } catch (reason) {
+      if (batchId) void coreApi.sealImportBatch(batchId).catch(() => undefined)
       setImportProgress((current) => (current ? { ...current, status: 'failed' } : current))
       setError(reason instanceof Error ? reason.message : '网页导入失败。')
     } finally {
@@ -979,16 +1162,20 @@ export function App() {
                 <strong>
                   {importProgress.status === 'running'
                     ? `正在处理 ${importProgress.completed + 1}/${importProgress.total}`
-                    : importProgress.status === 'succeeded'
-                      ? `已完成 ${importProgress.completed}/${importProgress.total}`
-                      : importProgress.status === 'partial'
-                        ? `已处理 ${importProgress.completed}/${importProgress.total}`
-                        : importProgress.status === 'canceled'
-                          ? `已取消，完成 ${importProgress.completed}/${importProgress.total}`
-                          : `导入失败 ${importProgress.completed}/${importProgress.total}`}
+                    : importProgress.status === 'processing'
+                      ? `正在索引 ${importProgress.completed}/${importProgress.total}`
+                      : importProgress.status === 'paused'
+                        ? `已暂停 ${importProgress.completed}/${importProgress.total}`
+                        : importProgress.status === 'succeeded'
+                          ? `已完成 ${importProgress.completed}/${importProgress.total}`
+                          : importProgress.status === 'partial'
+                            ? `已处理 ${importProgress.completed}/${importProgress.total}`
+                            : importProgress.status === 'canceled'
+                              ? `已取消，完成 ${importProgress.completed}/${importProgress.total}`
+                              : `导入失败 ${importProgress.completed}/${importProgress.total}`}
                 </strong>
                 <span title={importProgress.currentName}>
-                  {importProgress.status === 'running'
+                  {['running', 'processing', 'paused'].includes(importProgress.status)
                     ? importProgress.currentName
                     : importProgress.succeeded === undefined
                       ? importProgress.currentName
@@ -996,7 +1183,8 @@ export function App() {
                 </span>
               </div>
               <progress
-                {...(importProgress.status === 'running' && importProgress.total === 1
+                {...(['running', 'processing'].includes(importProgress.status) &&
+                importProgress.total === 1
                   ? {}
                   : { value: importProgress.completed })}
                 max={importProgress.total}
@@ -1006,13 +1194,31 @@ export function App() {
                 <button type="button" onClick={cancelFolderImport} aria-label="取消文件夹导入">
                   停止
                 </button>
-              ) : importProgress.status !== 'running' ? (
+              ) : ['processing', 'paused'].includes(importProgress.status) ? (
+                <div className="import-progress-actions">
+                  {importProgress.batchId && (
+                    <button type="button" onClick={() => void pauseOrResumeBatch()}>
+                      {importProgress.status === 'paused' ? '继续' : '暂停'}
+                    </button>
+                  )}
+                  <button type="button" onClick={() => void cancelQueuedImport()}>
+                    取消任务
+                  </button>
+                </div>
+              ) : !['running', 'processing', 'paused'].includes(importProgress.status) ? (
                 <div className="import-progress-actions">
                   {folderRetryPlan && (
                     <button type="button" onClick={() => void importFolder(folderRetryPlan)}>
                       {importProgress.status === 'canceled' ? '继续' : '重试'}
                     </button>
                   )}
+                  {!folderRetryPlan &&
+                    importProgress.batchId &&
+                    ['failed', 'partial', 'canceled'].includes(importProgress.status) && (
+                      <button type="button" onClick={() => void retryBatch()}>
+                        重试失败项
+                      </button>
+                    )}
                   <button
                     type="button"
                     onClick={() => {
@@ -1294,7 +1500,7 @@ export function App() {
                                 </span>
                                 <span>{formatDate(source.updated_at)}</span>
                                 <span>{formatBytes(source.size_bytes)}</span>
-                                {job?.status === 'failed' && (
+                                {job && ['failed', 'canceled'].includes(job.status) && (
                                   <span
                                     className="row-action"
                                     onClick={(event) => {

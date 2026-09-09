@@ -10,6 +10,7 @@ import pytest
 
 from loredock.application import LoreDockService
 from loredock.application import service as service_module
+from loredock.ingestion import ParsedDocument
 from loredock.ingestion.web import UrlFetcher, WebResponse
 
 
@@ -277,4 +278,172 @@ def test_model_install_runs_as_persisted_background_job(
     assert completed.status == "succeeded"
     assert completed.bytes_downloaded == completed.bytes_total
     assert completed.attempts == 1
+    service.close()
+
+
+def test_source_jobs_queue_cancel_and_retry_without_blocking_upload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from threading import Event
+
+    original_parse = service_module.parse_path
+    first_started = Event()
+    release_first = Event()
+    calls = 0
+
+    def controlled_parse(
+        path: Path, *, source_id: str | None = None, allowed_root: Path | None = None
+    ) -> ParsedDocument:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            first_started.set()
+            assert release_first.wait(timeout=2)
+        return original_parse(path, source_id=source_id, allowed_root=allowed_root)
+
+    monkeypatch.setattr(service_module, "parse_path", controlled_parse)
+    service = LoreDockService(tmp_path)
+    library = service.create_library("Queue")
+    first_source, first_job, _ = service.import_source(
+        library.id, "first.txt", "text/plain", BytesIO(b"first queued document"), background=True
+    )
+    assert first_job.status == "pending"
+    assert first_started.wait(timeout=2)
+
+    second_source, second_job, _ = service.import_source(
+        library.id,
+        "second.txt",
+        "text/plain",
+        BytesIO(b"second queued document"),
+        background=True,
+    )
+    assert service.cancel_job(second_job.id).status == "canceled"
+    release_first.set()
+
+    deadline = time.monotonic() + 3
+    while service.get_job(first_job.id).status in {"pending", "running"}:
+        assert time.monotonic() < deadline
+        time.sleep(0.01)
+    assert service.get_job(first_job.id).status == "succeeded"
+    assert service.get_source(first_source.id).status == "ready"
+
+    retried = service.retry_job(second_job.id)
+    assert retried.status == "pending"
+    while service.get_job(second_job.id).status in {"pending", "running"}:
+        assert time.monotonic() < deadline
+        time.sleep(0.01)
+    assert service.get_job(second_job.id).status == "succeeded"
+    assert service.get_source(second_source.id).status == "ready"
+    service.close()
+
+
+def test_import_batch_persists_duplicates_and_pause_resume(tmp_path: Path) -> None:
+    service = LoreDockService(tmp_path)
+    library = service.create_library("Batch")
+    service.import_source(library.id, "existing.txt", "text/plain", BytesIO(b"same content"))
+
+    duplicate_batch = service.create_import_batch(library.id, "Duplicates", 1)
+    _, _, duplicate = service.import_source(
+        library.id,
+        "copy.txt",
+        "text/plain",
+        BytesIO(b"same content"),
+        batch_id=duplicate_batch.id,
+        background=True,
+    )
+    completed_duplicate_batch = service.seal_import_batch(duplicate_batch.id)
+    assert duplicate
+    assert completed_duplicate_batch.status == "succeeded"
+    assert completed_duplicate_batch.duplicate_items == 1
+    assert completed_duplicate_batch.job_count == 0
+
+    paused_batch = service.create_import_batch(library.id, "Paused", 1)
+    assert service.pause_import_batch(paused_batch.id).status == "paused"
+    _, job, _ = service.import_source(
+        library.id,
+        "queued.txt",
+        "text/plain",
+        BytesIO(b"queued content"),
+        batch_id=paused_batch.id,
+        background=True,
+    )
+    assert service.seal_import_batch(paused_batch.id).status == "paused"
+    time.sleep(0.05)
+    assert service.get_job(job.id).status == "pending"
+
+    assert service.resume_import_batch(paused_batch.id).status == "processing"
+    deadline = time.monotonic() + 3
+    while service.get_import_batch(paused_batch.id).status == "processing":
+        assert time.monotonic() < deadline
+        time.sleep(0.01)
+    assert service.get_import_batch(paused_batch.id).status == "succeeded"
+    assert service.list_import_batches(library.id)[0].id == paused_batch.id
+    service.close()
+
+
+def test_background_upload_does_not_inspect_index_contract(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    service = LoreDockService(tmp_path)
+    library = service.create_library("Upload isolation")
+    batch = service.create_import_batch(library.id, "Paused upload", 1)
+    service.pause_import_batch(batch.id)
+
+    def unexpected_contract_check(_library_id: str) -> None:
+        raise AssertionError("upload must not inspect an index being written by the worker")
+
+    monkeypatch.setattr(service, "_ensure_index_contract", unexpected_contract_check)
+    source, job, duplicate = service.import_source(
+        library.id,
+        "queued.txt",
+        "text/plain",
+        BytesIO(b"accepted independently from index state"),
+        batch_id=batch.id,
+        background=True,
+    )
+
+    assert not duplicate
+    assert job.status == "pending"
+    assert service.layout.source_raw_path(library.id, source.id, ".txt").is_file()
+    service.cancel_import_batch(batch.id)
+    service.close()
+
+
+def test_cancel_running_source_job_discards_derived_content(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from threading import Event
+
+    original_parse = service_module.parse_path
+    parse_started = Event()
+    release_parse = Event()
+
+    def blocking_parse(
+        path: Path, *, source_id: str | None = None, allowed_root: Path | None = None
+    ) -> ParsedDocument:
+        parse_started.set()
+        assert release_parse.wait(timeout=2)
+        return original_parse(path, source_id=source_id, allowed_root=allowed_root)
+
+    monkeypatch.setattr(service_module, "parse_path", blocking_parse)
+    service = LoreDockService(tmp_path)
+    library = service.create_library("Cancel")
+    source, job, _ = service.import_source(
+        library.id,
+        "cancel.txt",
+        "text/plain",
+        BytesIO(b"content must not remain searchable"),
+        background=True,
+    )
+    assert parse_started.wait(timeout=2)
+    assert service.cancel_job(job.id).status == "canceled"
+    release_parse.set()
+
+    deadline = time.monotonic() + 3
+    while service.get_source(source.id).status != "canceled":
+        assert time.monotonic() < deadline
+        time.sleep(0.01)
+    artifact = service.layout.library(library.id).artifacts / f"{source.id}.txt"
+    assert not artifact.exists()
+    assert service.search(library.id, "searchable", lexical_only=True) == []
     service.close()

@@ -121,11 +121,35 @@ class JobResponse(ApiModel):
     id: str
     library_id: str
     source_id: str | None
+    batch_id: str | None = None
     kind: str
     status: str
     attempts: int
     progress: float
     error: str | None
+    created_at: str
+    updated_at: str
+
+
+class ImportBatchCreate(ApiModel):
+    name: str = Field(min_length=1, max_length=200)
+    expected_items: int = Field(ge=1, le=500)
+
+
+class ImportBatchResponse(ApiModel):
+    id: str
+    library_id: str
+    name: str
+    status: Literal[
+        "uploading", "processing", "paused", "succeeded", "partial", "failed", "canceled"
+    ]
+    expected_items: int
+    job_count: int
+    completed_items: int
+    succeeded_items: int
+    duplicate_items: int
+    failed_items: int
+    canceled_items: int
     created_at: str
     updated_at: str
 
@@ -138,6 +162,7 @@ class SourceImportResponse(ApiModel):
 
 class UrlSourceCreate(ApiModel):
     url: str = Field(min_length=1, max_length=2048)
+    batch_id: str | None = None
 
 
 class SearchRequest(ApiModel):

@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test'
 
 test('shows honest import progress until Core finishes processing', async ({ page }) => {
+  let imported = false
+  let batchPolls = 0
   const library = {
     id: 'lib',
     name: '导入验收库',
@@ -46,25 +48,83 @@ test('shows honest import progress until Core finishes processing', async ({ pag
         error: null
       }
     else if (path.endsWith('/models/jobs/latest')) data = null
-    else if (path.endsWith('/sources') && route.request().method() === 'POST') {
-      await new Promise((resolve) => setTimeout(resolve, 350))
+    else if (path.endsWith('/import-batches') && route.request().method() === 'POST') {
       data = {
-        source,
+        id: 'batch',
+        library_id: library.id,
+        name: source.name,
+        status: 'uploading',
+        expected_items: 1,
+        job_count: 0,
+        completed_items: 0,
+        succeeded_items: 0,
+        duplicate_items: 0,
+        failed_items: 0,
+        canceled_items: 0,
+        created_at: '2026-09-07',
+        updated_at: '2026-09-07'
+      }
+    } else if (path.endsWith('/import-batches')) {
+      data = { items: [], page: { limit: 20 } }
+    } else if (path.endsWith('/import-batches/batch/seal')) {
+      data = {
+        id: 'batch',
+        library_id: library.id,
+        name: source.name,
+        status: 'processing',
+        expected_items: 1,
+        job_count: 1,
+        completed_items: 0,
+        succeeded_items: 0,
+        duplicate_items: 0,
+        failed_items: 0,
+        canceled_items: 0,
+        created_at: '2026-09-07',
+        updated_at: '2026-09-07'
+      }
+    } else if (path.endsWith('/import-batches/batch')) {
+      batchPolls += 1
+      const completed = batchPolls >= 2
+      data = {
+        id: 'batch',
+        library_id: library.id,
+        name: source.name,
+        status: completed ? 'succeeded' : 'processing',
+        expected_items: 1,
+        job_count: 1,
+        completed_items: completed ? 1 : 0,
+        succeeded_items: completed ? 1 : 0,
+        duplicate_items: 0,
+        failed_items: 0,
+        canceled_items: 0,
+        created_at: '2026-09-07',
+        updated_at: '2026-09-07'
+      }
+    } else if (path.endsWith('/sources') && route.request().method() === 'POST') {
+      await new Promise((resolve) => setTimeout(resolve, 350))
+      imported = true
+      data = {
+        source: { ...source, status: 'pending' },
         duplicate: false,
         job: {
           id: 'job',
           library_id: library.id,
           source_id: source.id,
+          batch_id: 'batch',
           kind: 'index_source',
-          status: 'succeeded',
-          attempts: 1,
-          progress: 1,
+          status: 'pending',
+          attempts: 0,
+          progress: 0.1,
           error: null,
           created_at: '2026-09-07',
           updated_at: '2026-09-07'
         }
       }
-    } else if (path.endsWith('/sources')) data = { items: [], page: { limit: 10 } }
+    } else if (path.endsWith('/sources')) {
+      data = { items: imported ? [source] : [], page: { limit: 10 } }
+    } else if (path.endsWith('/content')) {
+      data = { source_id: source.id, text: '资料内容', char_start: 0, char_end: 4 }
+    } else if (path.endsWith('/favorite')) data = { favorite: false }
     await route.fulfill({ json: data })
   })
 
@@ -78,6 +138,7 @@ test('shows honest import progress until Core finishes processing', async ({ pag
   const progress = page.getByRole('status', { name: '资料导入进度' })
   await expect(progress).toContainText('正在处理 1/1')
   await expect(progress.locator('progress')).not.toHaveAttribute('value')
+  await expect(progress).toContainText('正在索引 0/1')
   await expect(progress).toContainText('已完成 1/1')
   await expect(progress.locator('progress')).toHaveAttribute('value', '1')
 })

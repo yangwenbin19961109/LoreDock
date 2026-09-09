@@ -51,6 +51,15 @@ def test_protocol_calls_real_core_with_scoped_grant(
                     files={"file": ("test.txt", b"BM25 fallback knowledge", "text/plain")},
                 )
             ).json()
+            job = {"status": "pending"}
+            for _ in range(300):
+                job = (
+                    await client.get(f"/api/v1/jobs/{imported['job']['id']}", headers=owner)
+                ).json()
+                if job["status"] not in {"pending", "running"}:
+                    break
+                await asyncio.sleep(0.01)
+            assert job["status"] == "succeeded"
             grant = (
                 await client.post(
                     "/api/v1/agent-grants", headers=owner, json={"library_ids": [library["id"]]}

@@ -135,7 +135,7 @@ libraries/{library_id}/
   → 标记 ready
 ```
 
-首批支持格式：Markdown、TXT、PDF、DOCX、PPTX、XLSX、HTML、URL 和纯文本笔记。项目不引入本地 OCR；后续仅提取并保存图片与页码/结构锚点，在文字搜索命中后展示相关原图，详见 [搜索关联图片展示优化](image-preview-backlog.md)。
+首批支持格式：Markdown、TXT、PDF、DOCX、PPTX、XLSX、HTML、URL 和纯文本笔记。项目不引入本地 OCR；第二期才提取并保存图片与页码/结构锚点，在文字搜索命中后展示相关原图，详见 [搜索关联图片展示优化](image-preview-backlog.md)。
 
 任务状态建议：
 
@@ -366,7 +366,7 @@ src/loredock/
 - SQLite 使用在线 backup API 或一致性快照，不能在 WAL 活跃时只复制主文件。
 - 索引默认可排除并在恢复后重建；若携带索引，必须校验 schema、模型和构建契约。
 - 数据格式与应用版本分离，所有 schema 使用显式版本号。
-- 导出应优先提供可读的 Markdown/JSON，避免形成产品锁定。
+- 二期实现导出时应优先提供原始资料和可读的 Markdown/JSON，避免形成产品锁定；该能力不属于一期 Phase 0～7 的发布范围。
 
 ## 14. 质量与评测
 
@@ -409,7 +409,7 @@ src/loredock/
 - Embedding 或 Reranker 不可用时，BM25 检索仍正常工作。
 - 应用异常退出后任务不会永久卡死，也不会生成混合的新旧索引。
 - Codex 与 Cursor 能通过 MCP 搜索并继续读取命中文档。
-- 用户能够导出原始资料和可读元数据，删除后不残留索引内容。
+- 删除资料后不残留索引内容；原始资料和可读元数据导出调整到二期，不作为首个里程碑验收条件。
 
 ## 17. 关键决策记录
 

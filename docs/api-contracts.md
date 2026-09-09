@@ -73,6 +73,14 @@ must not branch on free-form text.
 | `POST` | `/api/v1/libraries/{library_id}/search` | Hybrid or BM25-only search |
 | `GET` | `/api/v1/jobs/{job_id}` | Read persistent indexing job state |
 | `POST` | `/api/v1/jobs/{job_id}/retry` | Retry a failed indexing job, up to three attempts |
+| `POST` | `/api/v1/libraries/{library_id}/import-batches` | Create a persistent import batch before uploading its items |
+| `GET` | `/api/v1/libraries/{library_id}/import-batches` | List the 1–100 most recent import batches |
+| `GET` | `/api/v1/import-batches/{batch_id}` | Read aggregate batch progress and outcome counts |
+| `POST` | `/api/v1/import-batches/{batch_id}/seal` | Mark item submission complete |
+| `POST` | `/api/v1/import-batches/{batch_id}/pause` | Pause leasing new jobs and cooperatively pause the running item |
+| `POST` | `/api/v1/import-batches/{batch_id}/resume` | Resume a paused batch |
+| `POST` | `/api/v1/import-batches/{batch_id}/cancel` | Cooperatively cancel unfinished batch items |
+| `POST` | `/api/v1/import-batches/{batch_id}/retry` | Retry failed or canceled items below the attempt limit |
 | `GET` | `/api/v1/settings` | Read non-sensitive application preferences |
 | `PUT` | `/api/v1/settings` | Replace non-sensitive application preferences |
 | `GET` | `/api/v1/models/default` | Read the pinned local embedding model state |
@@ -125,6 +133,10 @@ repeated content hash within the same library returns the existing source and jo
 `duplicate: true`.
 
 `POST /api/v1/libraries/{library_id}/url-sources` accepts `{ "url": "https://..." }` and creates a bounded, one-time HTML or plain-text snapshot. The Core permits only public HTTP/HTTPS destinations on standard ports, pins the connection to a validated public DNS result, revalidates up to three redirects, rejects HTTPS downgrade, compressed or unsupported responses, and limits the decoded snapshot input to 10 MiB. URL sources expose additive `source_kind` and `origin_url` fields; file sources use `source_kind: "file"` and `origin_url: null`.
+
+File and URL import responses now represent durable acceptance, not completed indexing. A new source normally returns `source.status: "pending"` and `job.status: "pending"`; clients poll `GET /api/v1/jobs/{job_id}` until `succeeded`, `failed`, or `canceled`. `POST /api/v1/jobs/{job_id}/cancel` cooperatively cancels a pending or running source job. `POST /api/v1/jobs/{job_id}/retry` requeues a failed or canceled job while its trusted source copy exists and the three-attempt limit has not been reached. Duplicate imports may return an already terminal existing job.
+
+Multi-item clients create an import batch, pass its ID as the optional `batch_id` query parameter for file imports or `batch_id` JSON field for URL imports, then seal the batch after all submissions have completed. Batch history persists queued and duplicate items separately. Pausing prevents new leases and returns a running job to `pending` at its next stage boundary; resuming reuses the same job and trusted source copy. Batch list responses are bounded and newest-first. Clients that omit `batch_id` remain compatible with the single-job API.
 
 ## Phase 2.5 search context fields
 

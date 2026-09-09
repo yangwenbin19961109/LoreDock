@@ -91,7 +91,7 @@ def test_v4_to_latest_retry_preserves_metadata(tmp_path: Path) -> None:
     db.close()
     for _ in range(2):
         db = AppDatabase(path)
-        assert db.connection.execute("PRAGMA user_version").fetchone()[0] == 6
+        assert db.connection.execute("PRAGMA user_version").fetchone()[0] == 7
         assert db.connection.execute("SELECT name FROM libraries").fetchone()[0] == "Keep"
         assert db.connection.execute("PRAGMA foreign_key_check").fetchall() == []
         with pytest.raises(sqlite3.IntegrityError), db.transaction() as conn:

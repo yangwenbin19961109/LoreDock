@@ -3,6 +3,7 @@
 from loredock.retrieval.chunking import (
     ChunkedDocument,
     ChunkingConfig,
+    ChunkingStrategy,
     ParentSection,
     TextChunk,
     chunk_document,
@@ -18,6 +19,7 @@ from loredock.retrieval.index import ContextStrategy, HybridSearchIndex, SearchR
 __all__ = [
     "ChunkedDocument",
     "ChunkingConfig",
+    "ChunkingStrategy",
     "ContextStrategy",
     "E5OnnxEmbeddingProvider",
     "EmbeddingProvider",

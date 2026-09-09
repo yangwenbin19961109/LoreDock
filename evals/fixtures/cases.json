@@ -698,5 +698,742 @@
     "expected_sources": ["long-knowledge-manual", "operations"],
     "expected_passages": ["原始副本、解析产物、FTS 行、向量、Parent、Child 和缓存"],
     "tags": ["zh", "long-document", "deletion"]
+  },
+  {
+    "id": "table-007",
+    "query": "模型不可用时对照表指定什么降级搜索？",
+    "expected_sources": ["tables"],
+    "expected_passages": ["BM25-only"],
+    "tags": ["zh", "table", "fallback", "semantic-chunking"]
+  },
+  {
+    "id": "table-008",
+    "query": "五十万分块的工程基线索引体积是多少？",
+    "expected_sources": ["tables"],
+    "expected_passages": ["621.44 MiB"],
+    "tags": ["zh", "table", "performance", "semantic-chunking"]
+  },
+  {
+    "id": "code-007",
+    "query": "路径边界检查示例中定义的函数名称是什么？",
+    "expected_sources": ["code-sample"],
+    "expected_passages": ["def ensure_inside_library"],
+    "tags": ["zh", "code", "function-scope", "semantic-chunking"]
+  },
+  {
+    "id": "code-008",
+    "query": "切换新索引时使用哪个 Python 原子替换调用？",
+    "expected_sources": ["code-sample"],
+    "expected_passages": ["os.replace"],
+    "tags": ["zh", "code", "atomicity", "semantic-chunking"]
+  },
+  {
+    "id": "faq-007",
+    "query": "本地模型下载完成后，哪些能力可在离线状态使用？",
+    "expected_sources": ["faq"],
+    "expected_passages": ["资料解析、全文检索、向量检索和 MCP 本地访问都可以离线工作"],
+    "tags": ["zh", "faq", "offline", "semantic-chunking"]
+  },
+  {
+    "id": "faq-008",
+    "query": "MCP 写入和删除权限在当前版本的状态是什么？",
+    "expected_sources": ["faq"],
+    "expected_passages": ["写入和删除能力需要未来单独设计授权与确认流程"],
+    "tags": ["zh", "faq", "authorization", "semantic-chunking"]
+  },
+  {
+    "id": "manual-026",
+    "query": "上下文预算不足时，表格资料需要按什么范围裁剪？",
+    "expected_sources": ["long-knowledge-manual"],
+    "expected_passages": ["按连续行裁剪"],
+    "tags": ["zh", "long-document", "table", "semantic-chunking"]
+  },
+  {
+    "id": "manual-027",
+    "query": "代码资料的函数签名和函数体在上下文中可以被拆开吗？",
+    "expected_sources": ["long-knowledge-manual"],
+    "expected_passages": ["不应把函数签名与函数体拆到互不相关的上下文中"],
+    "tags": ["zh", "long-document", "code", "semantic-chunking"]
+  },
+  {
+    "id": "semantic-table-001",
+    "query": "ledger-01 的保留期限和审计标记是什么？",
+    "expected_sources": ["semantic-table-boundaries"],
+    "expected_passages": [
+      "| ledger-01 | invoice event | 31 days | purge source and index | audit-01 |"
+    ],
+    "tags": ["en", "table", "cross-row", "semantic-chunking"]
+  },
+  {
+    "id": "semantic-table-002",
+    "query": "ledger-20 删除记录时要同时清理什么？",
+    "expected_sources": ["semantic-table-boundaries"],
+    "expected_passages": [
+      "| ledger-20 | invoice event | 50 days | purge source and index | audit-20 |"
+    ],
+    "tags": ["en", "table", "cross-row", "semantic-chunking"]
+  },
+  {
+    "id": "semantic-table-003",
+    "query": "哪一个 audit marker 对应 63 days 的 retention？",
+    "expected_sources": ["semantic-table-boundaries"],
+    "expected_passages": [
+      "| ledger-33 | invoice event | 63 days | purge source and index | audit-33 |"
+    ],
+    "tags": ["en", "table", "cross-row", "semantic-chunking"]
+  },
+  {
+    "id": "semantic-table-004",
+    "query": "ledger-40 的 retention 是多少天？",
+    "expected_sources": ["semantic-table-boundaries"],
+    "expected_passages": [
+      "| ledger-40 | invoice event | 70 days | purge source and index | audit-40 |"
+    ],
+    "tags": ["en", "table", "cross-row", "semantic-chunking"]
+  },
+  {
+    "id": "semantic-code-001",
+    "query": "Which function writes audit marker stage-01?",
+    "expected_sources": ["semantic-code-boundaries"],
+    "expected_passages": ["def stage_01(record: str) -> str:"],
+    "tags": ["en", "code", "function-scope", "semantic-chunking"]
+  },
+  {
+    "id": "semantic-code-002",
+    "query": "Which function writes audit marker stage-08?",
+    "expected_sources": ["semantic-code-boundaries"],
+    "expected_passages": ["def stage_08(record: str) -> str:"],
+    "tags": ["en", "code", "function-scope", "semantic-chunking"]
+  },
+  {
+    "id": "semantic-code-003",
+    "query": "Which function writes audit marker stage-14?",
+    "expected_sources": ["semantic-code-boundaries"],
+    "expected_passages": ["def stage_14(record: str) -> str:"],
+    "tags": ["en", "code", "function-scope", "semantic-chunking"]
+  },
+  {
+    "id": "semantic-code-004",
+    "query": "Which function writes audit marker stage-20?",
+    "expected_sources": ["semantic-code-boundaries"],
+    "expected_passages": ["def stage_20(record: str) -> str:"],
+    "tags": ["en", "code", "function-scope", "semantic-chunking"]
+  },
+  {
+    "id": "semantic-long-001",
+    "query": "重新索引时何时发布临时索引以避免混合向量维度？",
+    "expected_sources": ["semantic-long-context"],
+    "expected_passages": [
+      "Step eta waits for all vector writes to finish before publishing the temporary index"
+    ],
+    "tags": ["zh", "long-document", "cross-child", "semantic-chunking"]
+  },
+  {
+    "id": "semantic-long-002",
+    "query": "哪一步检查 SQLite 数据库完整性？",
+    "expected_sources": ["semantic-long-context"],
+    "expected_passages": ["Step nu verifies the database with PRAGMA integrity_check"],
+    "tags": ["zh", "long-document", "cross-child", "semantic-chunking"]
+  },
+  {
+    "id": "semantic-long-003",
+    "query": "索引写锁需要持续到什么操作完成？",
+    "expected_sources": ["semantic-long-context"],
+    "expected_passages": ["Step omicron holds the index writer lock through manifest publication"],
+    "tags": ["zh", "long-document", "cross-child", "semantic-chunking"]
+  },
+  {
+    "id": "semantic-long-004",
+    "query": "什么时候才能对外显示新的来源版本和引用信息？",
+    "expected_sources": ["semantic-long-context"],
+    "expected_passages": [
+      "Step pi exposes the successful result only after the new source version and all citation metadata are committed together"
+    ],
+    "tags": ["zh", "long-document", "cross-child", "semantic-chunking"]
+  },
+  {
+    "id": "html-001",
+    "query": "HTML 来源进入索引前保存的来源标识是什么？",
+    "expected_sources": ["semantic-html-boundaries"],
+    "expected_passages": ["来源标识 html-safe-2026"],
+    "tags": ["zh", "html", "ingestion"]
+  },
+  {
+    "id": "html-002",
+    "query": "HTML 中哪些可见结构会进入解析产物？",
+    "expected_sources": ["semantic-html-boundaries"],
+    "expected_passages": ["标题、段落、列表和表格文本"],
+    "tags": ["zh", "html", "parsing"]
+  },
+  {
+    "id": "html-003",
+    "query": "HTML 外链图片会自动下载吗？",
+    "expected_sources": ["semantic-html-boundaries"],
+    "expected_passages": ["外链图片不会自动下载"],
+    "tags": ["zh", "html", "security"]
+  },
+  {
+    "id": "html-004",
+    "query": "哪些 HTML 主动内容不会执行或进入索引？",
+    "expected_sources": ["semantic-html-boundaries"],
+    "expected_passages": ["脚本、样式、模板、iframe 和 object 内容不会进入索引"],
+    "tags": ["zh", "html", "security"]
+  },
+  {
+    "id": "html-005",
+    "query": "What is the stable citation marker in the HTML fixture?",
+    "expected_sources": ["semantic-html-boundaries"],
+    "expected_passages": ["marker-html-citation"],
+    "tags": ["en", "cross-lingual", "html", "citation"]
+  },
+  {
+    "id": "html-006",
+    "query": "HTML 引用需要保留什么定位信息？",
+    "expected_sources": ["semantic-html-boundaries"],
+    "expected_passages": ["精确字符范围"],
+    "tags": ["zh", "html", "citation"]
+  },
+  {
+    "id": "html-007",
+    "query": "删除 HTML 来源时要同步清理哪些内容？",
+    "expected_sources": ["semantic-html-boundaries"],
+    "expected_passages": ["可信副本、解析产物、全文行和向量"],
+    "tags": ["zh", "html", "deletion"]
+  },
+  {
+    "id": "html-008",
+    "query": "How are HTML entities such as ampersands handled?",
+    "expected_sources": ["semantic-html-boundaries"],
+    "expected_passages": ["实体 & 会解码为普通字符"],
+    "tags": ["en", "cross-lingual", "html", "parsing"]
+  },
+  {
+    "id": "pptx-001",
+    "query": "发布前需要引用检查的 release gate 是什么？",
+    "expected_sources": ["office-slides"],
+    "expected_passages": ["ALPHA-27 requires citation checks"],
+    "tags": ["zh", "pptx", "citation"]
+  },
+  {
+    "id": "pptx-002",
+    "query": "Which slide marker keeps the previous index available?",
+    "expected_sources": ["office-slides"],
+    "expected_passages": ["BRAVO-42 keeps the previous index available"],
+    "tags": ["en", "pptx", "cross-lingual"]
+  },
+  {
+    "id": "pptx-003",
+    "query": "BRAVO-42 位于隐藏幻灯片吗？",
+    "expected_sources": ["office-slides"],
+    "expected_passages": ["# 幻灯片 2 (隐藏)"],
+    "tags": ["zh", "pptx", "page", "hidden"]
+  },
+  {
+    "id": "pptx-004",
+    "query": "ALPHA-27 在第几张幻灯片？",
+    "expected_sources": ["office-slides"],
+    "expected_passages": ["# 幻灯片 1"],
+    "tags": ["zh", "pptx", "page", "citation"]
+  },
+  {
+    "id": "xlsx-001",
+    "query": "DELTA-19 policy 的 retention 值是多少？",
+    "expected_sources": ["office-workbook"],
+    "expected_passages": ["A2: DELTA-19\nB2: 45"],
+    "tags": ["zh", "xlsx", "cell"]
+  },
+  {
+    "id": "xlsx-002",
+    "query": "Which worksheet contains archive marker ECHO-73?",
+    "expected_sources": ["office-workbook"],
+    "expected_passages": ["# 工作表 2: Archive (隐藏)"],
+    "tags": ["en", "xlsx", "cross-lingual", "hidden"]
+  },
+  {
+    "id": "xlsx-003",
+    "query": "ECHO-73 保存在什么单元格？",
+    "expected_sources": ["office-workbook"],
+    "expected_passages": ["C3: Archive marker ECHO-73"],
+    "tags": ["zh", "xlsx", "cell", "citation"]
+  },
+  {
+    "id": "xlsx-004",
+    "query": "工作簿 Summary 页的表头是什么？",
+    "expected_sources": ["office-workbook"],
+    "expected_passages": ["A1: Policy\nB1: Retention"],
+    "tags": ["zh", "xlsx", "table"]
+  },
+  {
+    "id": "boundary-001",
+    "query": "从 amber-11 保存原始来源标识到 silver-51 发布新来源版本，这两个检查点分别要求什么？",
+    "expected_sources": ["cross-boundary-recovery"],
+    "expected_passages": [
+      "Checkpoint amber-11 records the original source identifier",
+      "Checkpoint silver-51 exposes the new source version"
+    ],
+    "tags": ["zh", "cross-lingual", "cross-child", "citation-boundary"]
+  },
+  {
+    "id": "boundary-002",
+    "query": "Which checkpoints hash the trusted bytes and validate citations against the original text?",
+    "expected_sources": ["cross-boundary-recovery"],
+    "expected_passages": ["检查点 amber-12", "检查点 jade-32"],
+    "tags": ["en", "cross-lingual", "cross-child", "citation-boundary"]
+  },
+  {
+    "id": "boundary-003",
+    "query": "amber-13 路径安全检查和 silver-53 精确 source ID 删除分别执行什么保护？",
+    "expected_sources": ["cross-boundary-recovery"],
+    "expected_passages": ["Checkpoint amber-13 validates", "Checkpoint silver-53 permits deletion"],
+    "tags": ["zh", "cross-lingual", "cross-child", "path-safety", "deletion"]
+  },
+  {
+    "id": "boundary-004",
+    "query": "Which two checkpoints keep search usable during index construction and an atomic-switch failure?",
+    "expected_sources": ["cross-boundary-recovery"],
+    "expected_passages": ["检查点 cobalt-21", "检查点 violet-43"],
+    "tags": ["en", "cross-lingual", "cross-child", "atomicity"]
+  },
+  {
+    "id": "boundary-005",
+    "query": "请说明 cobalt-22 的 384 dimensions、normalization、query prefix 和 document prefix",
+    "expected_sources": ["cross-boundary-recovery"],
+    "expected_passages": ["384 dimensions, normalization rule, query prefix, document prefix"],
+    "tags": ["zh", "cross-lingual", "embedding-contract", "citation-boundary"]
+  },
+  {
+    "id": "boundary-006",
+    "query": "Which checkpoint defines Parent boundaries for tables and code?",
+    "expected_sources": ["cross-boundary-recovery"],
+    "expected_passages": [
+      "检查点 cobalt-23 对表格按连续行建立 Parent，对代码按完整函数建立 Parent"
+    ],
+    "tags": ["en", "cross-lingual", "table", "code", "semantic-chunking"]
+  },
+  {
+    "id": "boundary-007",
+    "query": "jade-31 发布前数据库完整性检查必须返回什么结果？",
+    "expected_sources": ["cross-boundary-recovery"],
+    "expected_passages": ["requires the result `ok` before publication"],
+    "tags": ["zh", "cross-lingual", "database", "citation-boundary"]
+  },
+  {
+    "id": "boundary-008",
+    "query": "At jade-32, which citation fields are checked against the trusted original text?",
+    "expected_sources": ["cross-boundary-recovery"],
+    "expected_passages": ["source ID、标题路径、页码和字符范围"],
+    "tags": ["en", "cross-lingual", "citation", "citation-boundary"]
+  },
+  {
+    "id": "boundary-009",
+    "query": "jade-33 发布前如何校验 vector writes、FTS rows、Parent、Child 和 manifest？",
+    "expected_sources": ["cross-boundary-recovery"],
+    "expected_passages": [
+      "vector writes, FTS rows, Parent records, Child records, and the manifest"
+    ],
+    "tags": ["zh", "cross-lingual", "cross-child", "atomicity"]
+  },
+  {
+    "id": "boundary-010",
+    "query": "What ordering remains available after a reranker failure?",
+    "expected_sources": ["cross-boundary-recovery"],
+    "expected_passages": ["检查点 violet-41 在 reranker 失败时保留已经去重的 RRF 顺序"],
+    "tags": ["en", "cross-lingual", "reranker", "fallback"]
+  },
+  {
+    "id": "boundary-011",
+    "query": "模型缺失、损坏或与索引契约不兼容时保留什么搜索方式？",
+    "expected_sources": ["cross-boundary-recovery"],
+    "expected_passages": ["BM25-only retrieval available"],
+    "tags": ["zh", "cross-lingual", "fallback", "embedding-contract"]
+  },
+  {
+    "id": "boundary-012",
+    "query": "Which unfinished files are removed when the atomic switch fails?",
+    "expected_sources": ["cross-boundary-recovery"],
+    "expected_passages": ["仅删除本次未完成的旁路文件"],
+    "tags": ["en", "cross-lingual", "atomicity", "recovery"]
+  },
+  {
+    "id": "boundary-013",
+    "query": "silver-51 为什么要求 citation metadata 和 index manifest committed together？",
+    "expected_sources": ["cross-boundary-recovery"],
+    "expected_passages": ["citation metadata and the index manifest are committed together"],
+    "tags": ["zh", "cross-lingual", "citation", "atomicity"]
+  },
+  {
+    "id": "boundary-014",
+    "query": "What may be logged, and which sensitive values must stay out of logs?",
+    "expected_sources": ["cross-boundary-recovery"],
+    "expected_passages": ["错误码、耗时和资源 ID", "不记录完整正文、认证令牌或未脱敏查询"],
+    "tags": ["en", "cross-lingual", "cross-child", "logging", "privacy"]
+  },
+  {
+    "id": "boundary-015",
+    "query": "silver-53 如何清理 trusted copy、parsed artifacts、FTS、vectors、Parent、Child 和 caches？",
+    "expected_sources": ["cross-boundary-recovery"],
+    "expected_passages": [
+      "trusted copy, parsed artifacts, FTS rows, vectors, Parent records, Child records, and caches"
+    ],
+    "tags": ["zh", "cross-lingual", "deletion", "citation-boundary"]
+  },
+  {
+    "id": "boundary-016",
+    "query": "Which early and late checkpoints protect source truth and complete deletion?",
+    "expected_sources": ["cross-boundary-recovery"],
+    "expected_passages": ["trusted raw bytes remain unchanged", "cleanup removes its trusted copy"],
+    "tags": ["en", "cross-child", "source-of-truth", "deletion"]
+  },
+  {
+    "id": "pdf-boundary-001",
+    "query": "诊断包应包含哪些状态，又必须排除哪些敏感内容？",
+    "expected_sources": ["recovery-guide"],
+    "expected_passages": [
+      "版本、任务状态、数据库完整性结果和脱敏日志",
+      "不包含原始文档、认证令牌或完整用户查询"
+    ],
+    "tags": ["zh", "pdf", "citation-boundary", "privacy"]
+  },
+  {
+    "id": "pdf-boundary-002",
+    "query": "Core 无法启动时应检查什么，为什么不能删除整个数据目录？",
+    "expected_sources": ["recovery-guide"],
+    "expected_passages": ["数据目录权限、端口占用和 app.sqlite 完整性", "不要通过删除整个数据目录"],
+    "tags": ["zh", "pdf", "recovery", "deletion"]
+  },
+  {
+    "id": "pdf-boundary-003",
+    "query": "Under 模型无法加载, what BM25-only fallback remains available after verification fails?",
+    "expected_sources": ["recovery-guide"],
+    "expected_passages": ["模型失败不应阻塞 BM25-only"],
+    "tags": ["en", "cross-lingual", "pdf", "fallback"]
+  },
+  {
+    "id": "pdf-boundary-004",
+    "query": "索引契约不匹配时，从旁路重建到切换需要满足什么顺序？",
+    "expected_sources": ["recovery-guide"],
+    "expected_passages": ["在旁路文件中重建派生索引", "成功校验后再原子切换"],
+    "tags": ["zh", "pdf", "cross-child", "atomicity"]
+  },
+  {
+    "id": "pdf-boundary-005",
+    "query": "When a task heartbeat and lease expire, how is the durable task recovered?",
+    "expected_sources": ["recovery-guide"],
+    "expected_passages": ["恢复流程把任务标记为失败或重新排队"],
+    "tags": ["en", "cross-lingual", "pdf", "jobs", "recovery"]
+  },
+  {
+    "id": "pdf-boundary-006",
+    "query": "磁盘空间不足时既要保留什么，又可以删除什么？",
+    "expected_sources": ["recovery-guide"],
+    "expected_passages": ["保留旧索引和原始资料", "删除未完成的旁路文件"],
+    "tags": ["zh", "pdf", "citation-boundary", "disk"]
+  },
+  {
+    "id": "pdf-boundary-007",
+    "query": "扫描型 PDF 没有文本层时如何处理，缺少 OCR 会影响哪些格式吗？",
+    "expected_sources": ["recovery-guide"],
+    "expected_passages": ["标记需要 OCR", "不影响 TXT、Markdown 和 DOCX"],
+    "tags": ["zh", "pdf", "ocr", "fallback"]
+  },
+  {
+    "id": "pdf-boundary-008",
+    "query": "Which four checks must pass before recovery can be marked succeeded?",
+    "expected_sources": ["recovery-guide"],
+    "expected_passages": ["数据库完整、来源可读、索引契约匹配、搜索引用有效"],
+    "tags": ["en", "cross-lingual", "pdf", "citation-boundary", "recovery"]
+  },
+  {
+    "id": "docx-boundary-001",
+    "query": "模型从 downloading 到 ready 之前需要经过哪些状态约束？",
+    "expected_sources": ["model-handbook"],
+    "expected_passages": [
+      "missing、downloading、verifying、ready 和 failed",
+      "只有 ready 状态允许创建 ONNX 推理会话"
+    ],
+    "tags": ["zh", "docx", "model-assets", "citation-boundary"]
+  },
+  {
+    "id": "docx-boundary-002",
+    "query": "Why can a partially downloaded .part model file not be treated as a formal asset?",
+    "expected_sources": ["model-handbook"],
+    "expected_passages": [".part 的临时文件", "不能被模型扫描器识别为正式资产"],
+    "tags": ["en", "cross-lingual", "docx", "download"]
+  },
+  {
+    "id": "docx-boundary-003",
+    "query": "模型完整性校验必须同时验证哪两个条件？",
+    "expected_sources": ["model-handbook"],
+    "expected_passages": ["预期字节数和 SHA-256"],
+    "tags": ["zh", "docx", "checksum", "citation-boundary"]
+  },
+  {
+    "id": "docx-boundary-004",
+    "query": "Which distinct prefixes are required for E5 queries and source passages?",
+    "expected_sources": ["model-handbook"],
+    "expected_passages": ["查询文本必须添加 query: 前缀，资料文本必须添加 passage: 前缀"],
+    "tags": ["en", "cross-lingual", "docx", "embedding-contract"]
+  },
+  {
+    "id": "docx-boundary-005",
+    "query": "E5 的池化和向量归一化规则分别是什么？",
+    "expected_sources": ["model-handbook"],
+    "expected_passages": ["按照 attention mask 执行 mean pooling", "对每个 384 维向量做 L2 归一化"],
+    "tags": ["zh", "docx", "embedding-contract", "citation-boundary"]
+  },
+  {
+    "id": "docx-boundary-006",
+    "query": "Under 批处理, changing the batch size must not alter vector semantics or the index contract; what is the rule?",
+    "expected_sources": ["model-handbook"],
+    "expected_passages": ["不能改变向量语义或索引契约"],
+    "tags": ["en", "cross-lingual", "docx", "embedding-contract"]
+  },
+  {
+    "id": "docx-boundary-007",
+    "query": "模型契约发生哪些变化时必须重建所有文档向量？",
+    "expected_sources": ["model-handbook"],
+    "expected_passages": ["模型标识、校验和、维度、前缀、池化或归一化规则变化时"],
+    "tags": ["zh", "docx", "reindex", "citation-boundary"]
+  },
+  {
+    "id": "docx-boundary-008",
+    "query": "What BM25-only capability remains usable, and what content stays away from external providers when local inference fails?",
+    "expected_sources": ["model-handbook"],
+    "expected_passages": ["搜索回退到 BM25-only", "不发送文档正文和查询到外部提供商"],
+    "tags": ["en", "cross-lingual", "docx", "cross-child", "fallback", "privacy"]
+  },
+  {
+    "id": "release-001",
+    "query": "Release safety matrix 的 net-01 如何 binds desktop listener，并 rejects 哪个地址？",
+    "expected_sources": ["release-safety-matrix"],
+    "expected_passages": ["binds the desktop listener to 127.0.0.1 and rejects 0.0.0.0"],
+    "tags": ["zh", "cross-lingual", "security", "network"]
+  },
+  {
+    "id": "release-002",
+    "query": "net-02 remote MCP requires which transport and authorization layers?",
+    "expected_sources": ["release-safety-matrix"],
+    "expected_passages": ["HTTPS plus user, session, and library authorization"],
+    "tags": ["en", "security", "mcp", "authorization"]
+  },
+  {
+    "id": "release-003",
+    "query": "Release safety matrix 的 net-03 为什么 after every URL redirect 要 block private targets？",
+    "expected_sources": ["release-safety-matrix"],
+    "expected_passages": ["after every URL redirect to block private targets"],
+    "tags": ["zh", "cross-lingual", "security", "ssrf"]
+  },
+  {
+    "id": "release-004",
+    "query": "net-04 rejects which four network target classes?",
+    "expected_sources": ["release-safety-matrix"],
+    "expected_passages": ["loopback, link-local, cloud metadata, and private network destinations"],
+    "tags": ["en", "security", "ssrf"]
+  },
+  {
+    "id": "release-005",
+    "query": "Release safety matrix 的 auth-05 为什么 checks library access again？",
+    "expected_sources": ["release-safety-matrix"],
+    "expected_passages": ["checks library access again"],
+    "tags": ["zh", "cross-lingual", "mcp", "authorization", "citation-boundary"]
+  },
+  {
+    "id": "release-006",
+    "query": "auth-06 under what condition may MCP stop being read-only?",
+    "expected_sources": ["release-safety-matrix"],
+    "expected_passages": ["future write permission is explicit and auditable"],
+    "tags": ["en", "mcp", "authorization"]
+  },
+  {
+    "id": "release-007",
+    "query": "Release safety matrix 的 path-07 如何 resolves symbolic links 并检查 library root？",
+    "expected_sources": ["release-safety-matrix"],
+    "expected_passages": [
+      "resolves symbolic links before proving that an imported path remains inside its library root"
+    ],
+    "tags": ["zh", "cross-lingual", "path-safety", "security"]
+  },
+  {
+    "id": "release-008",
+    "query": "render-08 对 Markdown、HTML 和文档指令采取什么措施？",
+    "expected_sources": ["release-safety-matrix"],
+    "expected_passages": [
+      "sanitizes Markdown and HTML before display",
+      "never executes document instructions"
+    ],
+    "tags": ["zh", "cross-lingual", "html", "untrusted-content"]
+  },
+  {
+    "id": "release-009",
+    "query": "Release safety matrix 的 db-11 如何用 SQLite backup API 创建 WAL-consistent backup？",
+    "expected_sources": ["release-safety-matrix"],
+    "expected_passages": ["WAL-consistent backup with the SQLite backup API"],
+    "tags": ["zh", "cross-lingual", "sqlite", "backup"]
+  },
+  {
+    "id": "release-010",
+    "query": "db-12 what result must integrity_check return before and after restore?",
+    "expected_sources": ["release-safety-matrix"],
+    "expected_passages": ["requires `ok`"],
+    "tags": ["en", "database", "backup"]
+  },
+  {
+    "id": "release-011",
+    "query": "Release safety matrix 的 mig-13 为什么 records its version exactly once？",
+    "expected_sources": ["release-safety-matrix"],
+    "expected_passages": ["records its version exactly once"],
+    "tags": ["zh", "cross-lingual", "migration"]
+  },
+  {
+    "id": "release-012",
+    "query": "mig-14 which two data-corruption outcomes must an interrupted migration retry avoid?",
+    "expected_sources": ["release-safety-matrix"],
+    "expected_passages": ["without duplicating rows or losing source metadata"],
+    "tags": ["en", "migration", "retry"]
+  },
+  {
+    "id": "release-013",
+    "query": "atomic-15 替换期间 chunks 和 vectors 在哪里暂存？",
+    "expected_sources": ["release-safety-matrix"],
+    "expected_passages": ["outside the visible source version"],
+    "tags": ["zh", "cross-lingual", "atomicity"]
+  },
+  {
+    "id": "release-014",
+    "query": "atomic-16 which records become visible in one transition?",
+    "expected_sources": ["release-safety-matrix"],
+    "expected_passages": ["new source version, citation rows, and index manifest"],
+    "tags": ["en", "atomicity", "citation"]
+  },
+  {
+    "id": "release-015",
+    "query": "Release safety matrix 的 hash-17 为什么比较 trusted raw-byte hashes？",
+    "expected_sources": ["release-safety-matrix"],
+    "expected_passages": ["trusted raw-byte hashes"],
+    "tags": ["zh", "cross-lingual", "deduplication", "source-of-truth"]
+  },
+  {
+    "id": "release-016",
+    "query": "delete-18 complete source deletion removes which indexed and cached artifacts?",
+    "expected_sources": ["release-safety-matrix"],
+    "expected_passages": ["parsed artifacts, FTS rows, vectors, and caches"],
+    "tags": ["en", "deletion", "citation-boundary"]
+  },
+  {
+    "id": "release-017",
+    "query": "search-21 如何合并 lexical 和 vector candidates？",
+    "expected_sources": ["release-safety-matrix"],
+    "expected_passages": ["reciprocal rank fusion"],
+    "tags": ["zh", "cross-lingual", "retrieval", "rrf"]
+  },
+  {
+    "id": "release-018",
+    "query": "search-22 when is BM25-only fallback required?",
+    "expected_sources": ["release-safety-matrix"],
+    "expected_passages": ["embeddings are missing or incompatible"],
+    "tags": ["en", "fallback", "embedding-contract"]
+  },
+  {
+    "id": "release-019",
+    "query": "请解释 Release safety matrix search-23 optional reranker times out invalid scores preserves fused results",
+    "expected_sources": ["release-safety-matrix"],
+    "expected_passages": ["preserves fused results"],
+    "tags": ["zh", "cross-lingual", "reranker", "fallback"]
+  },
+  {
+    "id": "release-020",
+    "query": "filter-24 which filters are applied before search results are returned?",
+    "expected_sources": ["release-safety-matrix"],
+    "expected_passages": ["library, source, and metadata filters"],
+    "tags": ["en", "filters", "retrieval"]
+  },
+  {
+    "id": "release-021",
+    "query": "Release safety matrix 的 cite-25 如何返回 stable source ID、title path 和 exact character offsets？",
+    "expected_sources": ["release-safety-matrix"],
+    "expected_passages": [
+      "stable source ID, title path, and exact character start and end offsets"
+    ],
+    "tags": ["zh", "cross-lingual", "citation", "citation-boundary"]
+  },
+  {
+    "id": "release-022",
+    "query": "cite-26 when may a citation include a page number?",
+    "expected_sources": ["release-safety-matrix"],
+    "expected_passages": ["parsed format supplies a reliable page boundary"],
+    "tags": ["en", "citation", "page"]
+  },
+  {
+    "id": "release-023",
+    "query": "context-27 为什么在响应预算前按 context ID 去重？",
+    "expected_sources": ["release-safety-matrix"],
+    "expected_passages": ["deduplicates repeated Parent contexts by context ID"],
+    "tags": ["zh", "cross-lingual", "context-budget", "deduplication"]
+  },
+  {
+    "id": "release-024",
+    "query": "context-28 what is returned when a matching Child belongs to an oversized Parent?",
+    "expected_sources": ["release-safety-matrix"],
+    "expected_passages": ["bounded continuous range around the matching Child"],
+    "tags": ["en", "child", "parent", "context-budget"]
+  },
+  {
+    "id": "release-025",
+    "query": "job-31 何时持久化 pending work，何时确认导入已接受？",
+    "expected_sources": ["release-safety-matrix"],
+    "expected_passages": ["persists pending work before acknowledging an accepted import request"],
+    "tags": ["zh", "cross-lingual", "jobs", "atomicity"]
+  },
+  {
+    "id": "release-026",
+    "query": "job-32 how is an expired running lease recovered after Core restart?",
+    "expected_sources": ["release-safety-matrix"],
+    "expected_passages": ["returns an expired running lease to pending state"],
+    "tags": ["en", "jobs", "recovery"]
+  },
+  {
+    "id": "release-027",
+    "query": "Release safety matrix 的 job-33 如何 stops leasing new batch items？",
+    "expected_sources": ["release-safety-matrix"],
+    "expected_passages": ["stops leasing new batch items"],
+    "tags": ["zh", "cross-lingual", "jobs"]
+  },
+  {
+    "id": "release-028",
+    "query": "job-34 cancellation takes effect where, and what successful data is preserved?",
+    "expected_sources": ["release-safety-matrix"],
+    "expected_passages": ["safe stage boundary", "without deleting successful sources"],
+    "tags": ["en", "jobs", "deletion", "citation-boundary"]
+  },
+  {
+    "id": "release-029",
+    "query": "Release safety matrix 的 retry-35 如何处理 failed or cancelled items 和 successful batch entries？",
+    "expected_sources": ["release-safety-matrix"],
+    "expected_passages": [
+      "only failed or cancelled items",
+      "preserves already successful batch entries"
+    ],
+    "tags": ["zh", "cross-lingual", "jobs", "retry"]
+  },
+  {
+    "id": "release-030",
+    "query": "log-36 which operational fields may be logged without documents or raw queries?",
+    "expected_sources": ["release-safety-matrix"],
+    "expected_passages": ["error codes, durations, and resource IDs"],
+    "tags": ["en", "logging", "privacy"]
+  },
+  {
+    "id": "release-031",
+    "query": "请解释 Release safety matrix secret-37 stores desktop authentication secrets in operating-system credential store",
+    "expected_sources": ["release-safety-matrix"],
+    "expected_passages": ["operating-system credential store"],
+    "tags": ["zh", "cross-lingual", "security", "secrets"]
+  },
+  {
+    "id": "release-032",
+    "query": "export-38 readable export 延期后什么仍是真实来源？",
+    "expected_sources": ["release-safety-matrix"],
+    "expected_passages": ["keeps original sources authoritative"],
+    "tags": ["zh", "cross-lingual", "source-of-truth", "scope"]
   }
 ]

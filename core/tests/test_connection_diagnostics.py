@@ -26,13 +26,21 @@ def test_owner_diagnostics_are_scoped_bounded_and_do_not_return_content(
             library = (
                 await client.post("/api/v1/libraries", headers=owner, json={"name": "Fixture"})
             ).json()
-            await client.post(
+            imported = await client.post(
                 f"/api/v1/libraries/{library['id']}/sources",
                 headers=owner,
                 files={
                     "file": ("private-filename.txt", b"unique diagnostic knowledge", "text/plain")
                 },
             )
+            job_id = imported.json()["job"]["id"]
+            job = {"status": "pending"}
+            for _ in range(300):
+                job = (await client.get(f"/api/v1/jobs/{job_id}", headers=owner)).json()
+                if job["status"] not in {"pending", "running"}:
+                    break
+                await asyncio.sleep(0.01)
+            assert job["status"] == "succeeded"
             connection = (
                 await client.post(
                     "/api/v1/agent-connections",

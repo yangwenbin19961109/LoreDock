@@ -46,3 +46,74 @@ def test_hierarchy_links_children_to_stable_sections() -> None:
     assert all(
         chunk.next_id == first.chunks[index + 1].id for index, chunk in enumerate(first.chunks[:-1])
     )
+
+
+def test_semantic_markdown_keeps_table_code_and_faq_contexts_together() -> None:
+    text = """# 常见问题
+
+## 可以离线使用吗?
+
+可以, 已经下载的资料无需联网。
+
+# 配置
+
+| 模型 | 维度 |
+|---|---:|
+| E5 | 384 |
+| BGE-M3 | 1024 |
+
+## 代码
+
+```python
+def answer() -> int:
+    return 384
+```
+"""
+    document = ParsedDocument("source", "semantic", text)
+    hierarchy = chunk_document_hierarchy(
+        document,
+        ChunkingConfig(
+            target_tokens=6,
+            max_tokens=8,
+            overlap_tokens=1,
+            version=2,
+            strategy="semantic_markdown",
+        ),
+    )
+
+    assert {parent.kind for parent in hierarchy.parents} >= {"faq", "table", "code_scope"}
+    assert all(
+        document.text[chunk.char_start : chunk.char_end] == chunk.text for chunk in hierarchy.chunks
+    )
+    for parent in hierarchy.parents:
+        assert document.text[parent.char_start : parent.char_end] == parent.text
+    table_parent = next(parent for parent in hierarchy.parents if parent.kind == "table")
+    assert "# 配置" in table_parent.text
+    assert "模型 | 维度" in table_parent.text
+    assert "BGE-M3 | 1024" in table_parent.text
+    code_parent = next(parent for parent in hierarchy.parents if parent.kind == "code_scope")
+    assert "## 代码" in code_parent.text
+    assert "def answer" in code_parent.text
+    generic = chunk_document_hierarchy(
+        document,
+        ChunkingConfig(
+            target_tokens=6,
+            max_tokens=8,
+            overlap_tokens=1,
+            strategy="generic",
+        ),
+    )
+    assert [(chunk.char_start, chunk.char_end) for chunk in hierarchy.chunks] == [
+        (chunk.char_start, chunk.char_end) for chunk in generic.chunks
+    ]
+
+
+def test_generic_strategy_remains_available_for_same_corpus_comparison() -> None:
+    document = ParsedDocument("source", "test", "# Heading\n\n| A | B |\n|---|---|\n| 1 | 2 |")
+
+    hierarchy = chunk_document_hierarchy(
+        document,
+        ChunkingConfig(target_tokens=32, max_tokens=32, overlap_tokens=0, strategy="generic"),
+    )
+
+    assert {parent.kind for parent in hierarchy.parents} == {"section"}

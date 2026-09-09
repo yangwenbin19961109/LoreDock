@@ -59,6 +59,41 @@ test('preflights a folder and imports only supported files after confirmation', 
         ],
         page: { limit: 50 }
       }
+    } else if (path.endsWith('/import-batches') && request.method() === 'POST') {
+      status = 201
+      data = {
+        id: 'folder-batch',
+        library_id: 'library',
+        name: 'folder-import',
+        status: 'uploading',
+        expected_items: 2,
+        job_count: 0,
+        completed_items: 0,
+        succeeded_items: 0,
+        duplicate_items: 0,
+        failed_items: 0,
+        canceled_items: 0,
+        created_at: source.created_at,
+        updated_at: source.updated_at
+      }
+    } else if (path.endsWith('/import-batches')) {
+      data = { items: [], page: { limit: 20 } }
+    } else if (path.endsWith('/import-batches/folder-batch/seal')) {
+      data = {
+        id: 'folder-batch',
+        library_id: 'library',
+        name: 'folder-import',
+        status: 'succeeded',
+        expected_items: 2,
+        job_count: 2,
+        completed_items: 2,
+        succeeded_items: 2,
+        duplicate_items: 0,
+        failed_items: 0,
+        canceled_items: 0,
+        created_at: source.created_at,
+        updated_at: source.updated_at
+      }
     } else if (path.endsWith('/sources') && request.method() === 'POST') {
       uploadCount += 1
       status = 201
@@ -68,6 +103,7 @@ test('preflights a folder and imports only supported files after confirmation', 
           id: 'job',
           library_id: 'library',
           source_id: source.id,
+          batch_id: 'folder-batch',
           kind: 'index_source',
           status: 'succeeded',
           attempts: 1,

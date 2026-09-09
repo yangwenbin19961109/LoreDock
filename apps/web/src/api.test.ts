@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type { LibraryId, SourceId } from '@loredock/contracts'
+import type { ImportBatchId, JobId, LibraryId, SourceId } from '@loredock/contracts'
 
 import { coreApi } from './api'
 import type { CoreApiError } from './api'
@@ -245,5 +245,45 @@ describe('LoreDock Core API client', () => {
 
     await expect(coreApi.deleteSource('source-id' as SourceId)).resolves.toBeUndefined()
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/sources/source-id', { method: 'DELETE' })
+  })
+
+  it('cancels a queued source job through the versioned API', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ id: 'job-id', status: 'canceled' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await coreApi.cancelJob('job-id' as JobId)
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/jobs/job-id/cancel', { method: 'POST' })
+  })
+
+  it('creates and pauses a persistent import batch', async () => {
+    const fetchMock = vi.fn().mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: 'batch-id', status: 'paused' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      )
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await coreApi.createImportBatch('library-id' as LibraryId, '资料批次', 3)
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      '/api/v1/libraries/library-id/import-batches',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ name: '资料批次', expected_items: 3 })
+      })
+    )
+
+    await coreApi.pauseImportBatch('batch-id' as ImportBatchId)
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/import-batches/batch-id/pause', {
+      method: 'POST'
+    })
   })
 })

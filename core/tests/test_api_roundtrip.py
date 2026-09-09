@@ -1,3 +1,4 @@
+import time
 from io import BytesIO
 from pathlib import Path
 from typing import Protocol, cast
@@ -17,6 +18,17 @@ class HttpClient(Protocol):
     def post(self, url: str, **kwargs: object) -> Response: ...
 
     def delete(self, url: str, **kwargs: object) -> Response: ...
+
+
+def _wait_for_import(client: HttpClient, job_id: str) -> dict[str, object]:
+    deadline = time.monotonic() + 3
+    payload: dict[str, object] = {}
+    while time.monotonic() < deadline:
+        payload = client.get(f"/api/v1/jobs/{job_id}").json()
+        if payload["status"] not in {"pending", "running"}:
+            return payload
+        time.sleep(0.01)
+    raise AssertionError(f"import job did not finish: {payload}")
 
 
 def _xlsx_upload() -> bytes:
@@ -76,6 +88,7 @@ def test_http_api_completes_knowledge_round_trip(tmp_path: Path) -> None:
     )
     assert imported.status_code == 201
     source_id = str(imported.json()["source"]["id"])
+    assert _wait_for_import(client, str(imported.json()["job"]["id"]))["status"] == "succeeded"
 
     searched = client.post(
         f"/api/v1/libraries/{library_id}/search",
@@ -95,6 +108,39 @@ def test_http_api_completes_knowledge_round_trip(tmp_path: Path) -> None:
 
     assert client.delete(f"/api/v1/sources/{source_id}").status_code == 204
     assert client.delete(f"/api/v1/libraries/{library_id}").status_code == 204
+    service.close()
+
+
+def test_http_import_batch_pause_resume_and_history(tmp_path: Path) -> None:
+    service = LoreDockService(tmp_path)
+    app = create_app(data_dir=tmp_path)
+    app.state.service = service
+    client = cast(HttpClient, TestClient(app))
+    library_id = str(client.post("/api/v1/libraries", json={"name": "Batch API"}).json()["id"])
+
+    created = client.post(
+        f"/api/v1/libraries/{library_id}/import-batches",
+        json={"name": "Two notes", "expected_items": 1},
+    )
+    assert created.status_code == 201
+    batch_id = str(created.json()["id"])
+    assert client.post(f"/api/v1/import-batches/{batch_id}/pause").json()["status"] == "paused"
+
+    imported = client.post(
+        f"/api/v1/libraries/{library_id}/sources?batch_id={batch_id}",
+        files={"file": ("batch.txt", "persistent batch history", "text/plain")},
+    )
+    assert imported.status_code == 201
+    assert imported.json()["job"]["batch_id"] == batch_id
+    assert client.post(f"/api/v1/import-batches/{batch_id}/seal").json()["status"] == "paused"
+    assert client.post(f"/api/v1/import-batches/{batch_id}/resume").status_code == 200
+    assert _wait_for_import(client, str(imported.json()["job"]["id"]))["status"] == "succeeded"
+
+    batch = client.get(f"/api/v1/import-batches/{batch_id}").json()
+    assert batch["status"] == "succeeded"
+    assert batch["succeeded_items"] == 1
+    history = client.get(f"/api/v1/libraries/{library_id}/import-batches").json()
+    assert history["items"][0]["id"] == batch_id
     service.close()
 
 
@@ -118,6 +164,7 @@ def test_http_api_accepts_html_without_indexing_active_content(tmp_path: Path) -
 
     assert imported.status_code == 201
     source_id = str(imported.json()["source"]["id"])
+    assert _wait_for_import(client, str(imported.json()["job"]["id"]))["status"] == "succeeded"
     content = client.get(f"/api/v1/sources/{source_id}/content")
     assert content.json()["text"] == "grounded citation"
     assert (
@@ -156,6 +203,7 @@ def test_http_api_accepts_xlsx_with_sheet_and_cell_reference(tmp_path: Path) -> 
 
     assert imported.status_code == 201
     source_id = str(imported.json()["source"]["id"])
+    assert _wait_for_import(client, str(imported.json()["job"]["id"]))["status"] == "succeeded"
     result = client.post(
         f"/api/v1/libraries/{library_id}/search",
         json={"query": "spreadsheet reference", "lexical_only": True},
@@ -184,6 +232,7 @@ def test_http_api_imports_bounded_url_snapshot(tmp_path: Path) -> None:
     source = imported.json()["source"]
     assert source["source_kind"] == "url"
     assert source["origin_url"] == "https://example.com/reference"
+    assert _wait_for_import(client, str(imported.json()["job"]["id"]))["status"] == "succeeded"
     content = client.get(f"/api/v1/sources/{source['id']}/content")
     assert content.json()["text"] == "HTTP imported web knowledge"
     service.close()

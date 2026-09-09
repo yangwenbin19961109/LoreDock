@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <title>HTML 安全导入验收手册</title>
+  </head>
+  <body>
+    <h1>HTML 安全导入</h1>
+    <p>来源标识 html-safe-2026 在保存原始可信副本后进入后台索引队列。</p>
+    <h2>可见内容</h2>
+    <p>标题、段落、列表和表格文本会进入可重建解析产物，并保留字符引用范围。</p>
+    <ul>
+      <li>实体 &amp; 会解码为普通字符。</li>
+      <li>外链图片不会自动下载。</li>
+    </ul>
+    <h2>主动内容</h2>
+    <p>脚本、样式、模板、iframe 和 object 内容不会进入索引，也不会被执行。</p>
+    <h2>引用与删除</h2>
+    <p>引用 marker-html-citation 必须定位到当前来源的精确字符范围。</p>
+    <p>删除来源时同时清理可信副本、解析产物、全文行和向量。</p>
+    <script>
+      secret-script-marker must never be indexed
+    </script>
+    <style>
+      .secret-style-marker {
+        display: none;
+      }
+    </style>
+  </body>
+</html>

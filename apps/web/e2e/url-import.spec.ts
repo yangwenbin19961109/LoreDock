@@ -56,6 +56,40 @@ test('imports a public webpage snapshot from the library toolbar', async ({ page
         ],
         page: { limit: 50 }
       }
+    } else if (path.endsWith('/import-batches') && request.method() === 'POST') {
+      data = {
+        id: 'url-batch',
+        library_id: 'library',
+        name: source.origin_url,
+        status: 'uploading',
+        expected_items: 1,
+        job_count: 0,
+        completed_items: 0,
+        succeeded_items: 0,
+        duplicate_items: 0,
+        failed_items: 0,
+        canceled_items: 0,
+        created_at: source.created_at,
+        updated_at: source.updated_at
+      }
+    } else if (path.endsWith('/import-batches')) {
+      data = { items: [], page: { limit: 20 } }
+    } else if (path.endsWith('/import-batches/url-batch/seal')) {
+      data = {
+        id: 'url-batch',
+        library_id: 'library',
+        name: source.origin_url,
+        status: 'succeeded',
+        expected_items: 1,
+        job_count: 1,
+        completed_items: 1,
+        succeeded_items: 1,
+        duplicate_items: 0,
+        failed_items: 0,
+        canceled_items: 0,
+        created_at: source.created_at,
+        updated_at: source.updated_at
+      }
     } else if (path.endsWith('/url-sources')) {
       submittedUrl = (request.postDataJSON() as { url: string }).url
       imported = true
@@ -65,6 +99,7 @@ test('imports a public webpage snapshot from the library toolbar', async ({ page
           id: 'job',
           library_id: 'library',
           source_id: source.id,
+          batch_id: 'url-batch',
           kind: 'index_source',
           status: 'succeeded',
           attempts: 1,

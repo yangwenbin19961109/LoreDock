@@ -68,11 +68,31 @@ class JobRecord:
     id: str
     library_id: str
     source_id: str | None
+    batch_id: str | None
     kind: str
     status: str
     attempts: int
     progress: float
     error: str | None
+    created_at: str
+    updated_at: str
+
+
+@dataclass(frozen=True, slots=True)
+class ImportBatchRecord:
+    id: str
+    library_id: str
+    name: str
+    status: Literal[
+        "uploading", "processing", "paused", "succeeded", "partial", "failed", "canceled"
+    ]
+    expected_items: int
+    job_count: int
+    completed_items: int
+    succeeded_items: int
+    duplicate_items: int
+    failed_items: int
+    canceled_items: int
     created_at: str
     updated_at: str
 

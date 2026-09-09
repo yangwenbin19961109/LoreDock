@@ -82,6 +82,7 @@ export type LibraryId = string & { readonly __brand: 'LibraryId' }
 export type SourceId = string & { readonly __brand: 'SourceId' }
 export type ChunkId = string & { readonly __brand: 'ChunkId' }
 export type JobId = string & { readonly __brand: 'JobId' }
+export type ImportBatchId = string & { readonly __brand: 'ImportBatchId' }
 
 export interface Library {
   readonly id: LibraryId
@@ -109,6 +110,7 @@ export interface Job {
   readonly id: JobId
   readonly library_id: LibraryId
   readonly source_id: SourceId | null
+  readonly batch_id?: ImportBatchId | null
   readonly kind: string
   readonly status: string
   readonly attempts: number
@@ -122,6 +124,23 @@ export interface SourceImportResponse {
   readonly source: Source
   readonly job: Job
   readonly duplicate: boolean
+}
+
+export interface ImportBatch {
+  readonly id: ImportBatchId
+  readonly library_id: LibraryId
+  readonly name: string
+  readonly status:
+    'uploading' | 'processing' | 'paused' | 'succeeded' | 'partial' | 'failed' | 'canceled'
+  readonly expected_items: number
+  readonly job_count: number
+  readonly completed_items: number
+  readonly succeeded_items: number
+  readonly duplicate_items: number
+  readonly failed_items: number
+  readonly canceled_items: number
+  readonly created_at: string
+  readonly updated_at: string
 }
 
 export interface LibraryCreateRequest {

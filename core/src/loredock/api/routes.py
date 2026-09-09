@@ -9,6 +9,8 @@ from loredock.api.contracts import (
     AppSettingsUpdate,
     FavoriteState,
     HealthResponse,
+    ImportBatchCreate,
+    ImportBatchResponse,
     JobResponse,
     LibraryCreate,
     LibraryResponse,
@@ -193,12 +195,15 @@ def import_source(
     library_id: str,
     service: Service,
     file: Annotated[UploadFile, File()],
+    batch_id: str | None = None,
 ) -> SourceImportResponse:
     source, job, duplicate = service.import_source(
         library_id,
         file.filename or "document",
         file.content_type,
         file.file,
+        batch_id=batch_id,
+        background=True,
     )
     return SourceImportResponse(
         source=SourceResponse.model_validate(source),
@@ -216,7 +221,9 @@ def import_source(
 def import_url_source(
     library_id: str, payload: UrlSourceCreate, service: Service
 ) -> SourceImportResponse:
-    source, job, duplicate = service.import_url(library_id, payload.url)
+    source, job, duplicate = service.import_url(
+        library_id, payload.url, batch_id=payload.batch_id, background=True
+    )
     return SourceImportResponse(
         source=SourceResponse.model_validate(source),
         job=JobResponse.model_validate(job),
@@ -299,3 +306,81 @@ def get_job(job_id: str, service: Service) -> JobResponse:
 @router.post("/jobs/{job_id}/retry", response_model=JobResponse, tags=["jobs"])
 def retry_job(job_id: str, service: Service) -> JobResponse:
     return JobResponse.model_validate(service.retry_job(job_id))
+
+
+@router.post("/jobs/{job_id}/cancel", response_model=JobResponse, tags=["jobs"])
+def cancel_job(job_id: str, service: Service) -> JobResponse:
+    return JobResponse.model_validate(service.cancel_job(job_id))
+
+
+@router.post(
+    "/libraries/{library_id}/import-batches",
+    response_model=ImportBatchResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["import-batches"],
+)
+def create_import_batch(
+    library_id: str, payload: ImportBatchCreate, service: Service
+) -> ImportBatchResponse:
+    return ImportBatchResponse.model_validate(
+        service.create_import_batch(library_id, payload.name, payload.expected_items)
+    )
+
+
+@router.get(
+    "/libraries/{library_id}/import-batches",
+    response_model=Page[ImportBatchResponse],
+    tags=["import-batches"],
+)
+def list_import_batches(
+    library_id: str,
+    service: Service,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> Page[ImportBatchResponse]:
+    items = [
+        ImportBatchResponse.model_validate(batch)
+        for batch in service.list_import_batches(library_id, limit=limit)
+    ]
+    return Page(items=items, page=PageInfo(limit=limit, next_cursor=None))
+
+
+@router.get(
+    "/import-batches/{batch_id}", response_model=ImportBatchResponse, tags=["import-batches"]
+)
+def get_import_batch(batch_id: str, service: Service) -> ImportBatchResponse:
+    return ImportBatchResponse.model_validate(service.get_import_batch(batch_id))
+
+
+@router.post(
+    "/import-batches/{batch_id}/seal", response_model=ImportBatchResponse, tags=["import-batches"]
+)
+def seal_import_batch(batch_id: str, service: Service) -> ImportBatchResponse:
+    return ImportBatchResponse.model_validate(service.seal_import_batch(batch_id))
+
+
+@router.post(
+    "/import-batches/{batch_id}/pause", response_model=ImportBatchResponse, tags=["import-batches"]
+)
+def pause_import_batch(batch_id: str, service: Service) -> ImportBatchResponse:
+    return ImportBatchResponse.model_validate(service.pause_import_batch(batch_id))
+
+
+@router.post(
+    "/import-batches/{batch_id}/resume", response_model=ImportBatchResponse, tags=["import-batches"]
+)
+def resume_import_batch(batch_id: str, service: Service) -> ImportBatchResponse:
+    return ImportBatchResponse.model_validate(service.resume_import_batch(batch_id))
+
+
+@router.post(
+    "/import-batches/{batch_id}/cancel", response_model=ImportBatchResponse, tags=["import-batches"]
+)
+def cancel_import_batch(batch_id: str, service: Service) -> ImportBatchResponse:
+    return ImportBatchResponse.model_validate(service.cancel_import_batch(batch_id))
+
+
+@router.post(
+    "/import-batches/{batch_id}/retry", response_model=ImportBatchResponse, tags=["import-batches"]
+)
+def retry_import_batch(batch_id: str, service: Service) -> ImportBatchResponse:
+    return ImportBatchResponse.model_validate(service.retry_import_batch(batch_id))

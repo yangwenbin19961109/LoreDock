@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import cast
 
 from loredock.evaluation.runner import run_evaluation
-from loredock.retrieval import ContextStrategy
+from loredock.retrieval import ChunkingConfig, ChunkingStrategy, ContextStrategy
 from loredock.retrieval.model_assets import load_e5_provider
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
@@ -27,10 +27,17 @@ def main() -> None:
     parser.add_argument(
         "--context-strategy", choices=("child", "adjacent", "parent"), default="parent"
     )
+    parser.add_argument(
+        "--chunking-strategy",
+        choices=("generic", "semantic_markdown"),
+        default="generic",
+        help="Select the Parent/Child construction strategy for a controlled evaluation run.",
+    )
     args = parser.parse_args()
     if args.lexical_only and args.vector_only:
         parser.error("--lexical-only and --vector-only cannot be used together")
     provider = load_e5_provider(args.model_dir) if args.model_dir is not None else None
+    chunking_strategy = cast(ChunkingStrategy, args.chunking_strategy)
     _, details = run_evaluation(
         args.documents,
         args.cases,
@@ -38,6 +45,10 @@ def main() -> None:
         vector_only=args.vector_only,
         provider=provider,
         context_strategy=cast(ContextStrategy, args.context_strategy),
+        config=ChunkingConfig(
+            version=2 if chunking_strategy == "semantic_markdown" else 1,
+            strategy=chunking_strategy,
+        ),
     )
     rendered = json.dumps(details, ensure_ascii=False, indent=2)
     if args.output:

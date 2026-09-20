@@ -5,7 +5,8 @@
     "resources": {
       "../../../core/dist/loredock-core/": "core/",
       "../../../LICENSE.md": "licenses/LICENSE.md",
-      "../../../docs/dependency-licenses.md": "licenses/dependency-licenses.md"
+      "../../../docs/dependency-licenses.md": "licenses/dependency-licenses.md",
+      "target/loredock-third-party-notices/": "licenses/third-party/"
     }
   }
 }

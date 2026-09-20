@@ -12,7 +12,7 @@
   "scripts": {
     "build": "pnpm -r --if-present build",
     "build:core:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-core-sidecar.ps1",
-    "build:desktop:windows": "pnpm build:core:windows && pnpm --filter @loredock/desktop exec tauri build --config src-tauri/tauri.bundle.conf.json",
+    "build:desktop:windows": "pnpm build:core:windows && python -m uv run --directory core python ../scripts/generate-windows-notices.py && pnpm --filter @loredock/desktop exec tauri build --config src-tauri/tauri.bundle.conf.json",
     "test:core:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-core-sidecar.ps1",
     "test:installer:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-windows-installer.ps1",
     "dev": "pnpm --filter @loredock/web dev",

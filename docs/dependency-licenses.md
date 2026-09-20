@@ -94,5 +94,5 @@ PyInstaller 是构建依赖；其 bootloader exception 允许分发由 PyInstall
 
 - 当前直接依赖和运行时下载模型均能定位到上游来源及许可证，未发现与 PolyForm Noncommercial 项目分发直接冲突的许可证。
 - 项目负责人已确认项目图标与图片为 LoreDock 专门生成的自有素材，并决定保留 PolyForm Noncommercial，不将项目称为 OSI 定义下的开源软件。
-- Windows 安装包正式对外分发前，应根据实际打包内容生成并随包提供第三方声明；本文件的直接依赖表不能替代安装包中全部传递依赖的声明。
+- 后续 Windows 构建已增加 `scripts/generate-windows-notices.py`，从本地锁定依赖树收集可读取的声明文本并随包提供，同时单列缺失项；详见 [Windows 预览版发布核查](windows-preview-release-checklist.md)。当前仍有未决声明文本和实际打包内容复核，本文件的直接依赖表及自动收集结果都不能单独证明完整合规。已发布的 `v0.1.0-preview.1` 安装包未包含这一新增收集结果。
 - 不要把依赖缓存、下载模型、私人资料、数据库、日志或凭据提交到仓库。

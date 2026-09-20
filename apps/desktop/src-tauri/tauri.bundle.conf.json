@@ -3,7 +3,9 @@
     "active": true,
     "icon": ["icons/icon.ico"],
     "resources": {
-      "../../../core/dist/loredock-core/": "core/"
+      "../../../core/dist/loredock-core/": "core/",
+      "../../../LICENSE.md": "licenses/LICENSE.md",
+      "../../../docs/dependency-licenses.md": "licenses/dependency-licenses.md"
     }
   }
 }

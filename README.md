@@ -62,3 +62,5 @@ Phase 0～2 Core 闭环、Phase 2.5 分层混合检索、Phase 3 Windows 桌面 
 LoreDock 以 [PolyForm Noncommercial License 1.0.0](LICENSE.md) 提供源码，仅授权非商业用途。个人学习、研究、实验和业余项目可以使用、修改和分发；商业使用需要另行取得授权。
 
 由于该协议限制商业用途，LoreDock 属于“源码可用（source-available）”项目，不属于 OSI 定义下的开源软件。
+
+如需商业授权，请通过 [GitHub Issues](https://github.com/yangwenbin19961109/LoreDock/issues) 联系项目维护者；提出需求不代表已获得商业使用许可。第三方依赖、模型和素材信息见[许可证清单](docs/dependency-licenses.md)。

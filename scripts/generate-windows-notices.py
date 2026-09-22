@@ -283,9 +283,16 @@ def main() -> None:
         encoding="utf-8",
     )
     (OUTPUT / "REVIEW_NEEDED.txt").write_text(
-        "Unresolved local notice texts; do not treat this bundle as a complete license audit.\n\n"
-        + "\n".join(missing)
-        + "\n",
+        (
+            "Unresolved local notice texts; do not treat this bundle as a complete license audit.\n\n"
+            + "\n".join(missing)
+            + "\n"
+        )
+        if missing
+        else (
+            "No unresolved notice texts in this bundle. "
+            "Every listed dependency has a local or upstream-supplemented license text.\n"
+        ),
         encoding="utf-8",
     )
     print(

@@ -1,0 +1,2 @@
+﻿URL: https://raw.githubusercontent.com/open-i18n/rust-unic/master/LICENSE-APACHE
+Fetched: 2026-09-22

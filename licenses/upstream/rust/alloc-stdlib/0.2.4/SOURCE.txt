@@ -1,0 +1,2 @@
+﻿URL: https://raw.githubusercontent.com/dropbox/rust-alloc-no-stdlib/master/LICENSE
+Fetched: 2026-09-22

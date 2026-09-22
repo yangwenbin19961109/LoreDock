@@ -1,0 +1,2 @@
+﻿URL: https://raw.githubusercontent.com/mozilla/MPL-2.0/master/MPL-2.0.txt (official MPL-2.0 text; selectors crate is MPL-2.0 per servo/stylo README)
+Fetched: 2026-09-22

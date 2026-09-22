@@ -18,7 +18,18 @@
 
 本机生成结果共收集 293 个依赖条目（包含部分构建依赖），有 13 项没有可读取的本地声明文本：上述 10 个 Rust 包，以及 `flatbuffers 25.12.19`、`sqlite-vec 0.1.9`、`tokenizers 0.23.1`。其余先前未在 Python `License-File` 元数据中列出的包，在安装文件中找到了可读取的声明文本。不同系统或依赖缓存可能得到不同的未决清单，应以对应安装包内的 `REVIEW_NEEDED.txt` 为准。
 
-下一步先从上述包的上游发行物取得所需声明，按实际安装包内容汇总并随包提供；然后重新构建一个新预览 tag。不要移动或重写已有 tag，也不要把现有预发布包标记为正式发布。
+## 上游声明补齐
+
+2026-10-02 已补齐上述 13 项的声明文本，来源与核对结论如下：
+
+- 生成脚本 `scripts/generate-windows-notices.py` 新增 `licenses/upstream/{ecosystem}/{name}/{version}/` 回退目录：本地包内读不到声明文本时，使用仓库内已提交的上游文本，并在条目中标注 `upstream/...` 文件名。脚本以 `core/.venv` 解释器运行（否则会收集到全局 Python 环境里的无关包，例如占位包 `bs4 0.0.2`）。
+- Rust 包 `alloc-stdlib 0.2.4`（BSD-3-Clause，来自 dropbox/rust-alloc-no-stdlib）、`webview2-com 0.38.2`、`webview2-com-macros 0.8.1`、`webview2-com-sys 0.38.2`（MIT，来自 wravery/webview2-rs/）已取得对应 MIT/BSD 许可文本。
+- `unic-char-property`、`unic-char-range`、`unic-common`、`unic-ucd-ident`、`unic-ucd-version`（均为 0.9.0，MIT/Apache-2.0，来自 open-i18n/rust-unic）已同时取得 `LICENSE-MIT` 与 `LICENSE-APACHE` 两份文本。
+- `selectors 0.36.1` 为 MPL-2.0（servo/stylo 仓库根目录没有单独 LICENSE 文件，README 声明整个 Stylo 项目按 MPL-2.0 授权）。MPL-2.0 §3.3 要求发布者让接收者能够获取许可文本：本包随安装资源提供来自 SPDX license-list 的 MPL-2.0 官方全文（`MPL-2.0.txt`），并保留 crate 元数据中的 `MPL-2.0` 标识，满足该项义务。
+- Python 包 `flatbuffers 25.12.19`（Apache-2.0，来自 google/flatbuffers）、`sqlite-vec 0.1.9`（MIT/Apache-2.0，来自 asg017/sqlite-vec，含 `LICENSE-MIT` 与 `LICENSE-APACHE`）、`tokenizers 0.23.1`（Apache-2.0，来自 huggingface/tokenizers）已取得对应文本。
+- 重新运行后：本机收集 293 个依赖条目，`REVIEW_NEEDED.txt` 为空。新版包内的 `THIRD_PARTY_NOTICES.txt` 包含上述 13 项的 `upstream/` 文本块。
+
+下一步从该状态重建安装资源并创建新预览 tag；不要移动或重写已有 tag，也不要把现有预发布包标记为正式发布。
 
 ## 干净 Windows 虚拟机验收
 

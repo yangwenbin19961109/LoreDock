@@ -46,6 +46,7 @@
 - Phase 7 第 6 项本机打包更新：Windows Core、MCP bridge、Web、Tauri Release、MSI 和 NSIS 已按当前代码重建；打包 Core 的启动、401 鉴权、导入索引及退出烟雾测试通过。安装资源新增项目 PolyForm 许可证与直接依赖清单，MSI/NSIS 生成脚本均确认包含两份文件。传递依赖完整声明、干净虚拟机安装/覆盖升级/卸载矩阵和人工界面验收仍未完成，不将本机产物视为正式发布版。
 - 2026-09-20 的 `v0.1.0-preview.1` 已通过 GitHub CI；Windows runner 从该 tag 构建 MSI/NSIS 并通过打包 Core 烟雾测试，两个安装包已附加到[预发布页](https://github.com/yangwenbin19961109/LoreDock/releases/tag/v0.1.0-preview.1)。此验证不包含实际安装、升级或卸载；后续 tag 的流水线已接入相同打包步骤。发布前剩余事项与可复现操作见 [Windows 预览版发布核查](windows-preview-release-checklist.md)。
 - 传递依赖声明的下一步已接入 Windows 构建：从锁定的 Windows Rust 树、当前 Python 环境和 Web 生产依赖汇总许可元数据与本地声明文本，随 MSI/NSIS 安装资源提供 `THIRD_PARTY_NOTICES.txt` 和未决项 `REVIEW_NEEDED.txt`。本机全流程重建、打包 Core 烟雾测试及两种安装包脚本包含检查通过；当前仍有 13 项缺少本地声明文本，尚未完成最终许可证复核或创建新 tag，已发布的 `v0.1.0-preview.1` 安装包不受此次代码变更影响。
+- 13 项缺失声明文本已从上游补齐并纳入生成脚本：`licenses/upstream/` 新增 10 个 Rust 包与 3 个 Python 包的许可文本（含 selectors 的 MPL-2.0 官方全文，满足 MPL-2.0 §3.3 随分发提供许可文本的义务；unic 与 sqlite-vec 同时提供 MIT 和 Apache-2.0 两份文本）。脚本以 `core/.venv` 解释器运行时重新收集 293 个条目、`REVIEW_NEEDED.txt` 为空；此前误用全局 Python 会引入无关占位包 `bs4 0.0.2`。核对结论见 [Windows 预览版发布核查](windows-preview-release-checklist.md#上游声明补齐)。
 - D-A05 已修复：上传请求不再检查或重建索引；后台执行器在索引锁内完成契约检查，索引提交与 manifest 更新共享同一锁边界，搜索检查与读取也已串行。现场已接收任务均成功，未删除或重建用户资料。新增隔离回归后全量结果为 Core 138 项通过（另 1 项系统测试默认跳过）、Web 45 项和 Playwright 11 项通过；下一步用 10 份以上资料桌面复验首次批量导入。
 - 测试程序保持运行供验收。本次提交和推送不包含安装包、模型、数据库、备份、私人资料、凭据或运行日志。
 

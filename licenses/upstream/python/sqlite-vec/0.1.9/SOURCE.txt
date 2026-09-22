@@ -1,0 +1,2 @@
+﻿URL: https://github.com/asg017/sqlite-vec (LICENSE-MIT, LICENSE-APACHE)
+Fetched: 2026-09-22

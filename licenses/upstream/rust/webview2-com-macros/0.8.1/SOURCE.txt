@@ -1,0 +1,2 @@
+﻿URL: https://raw.githubusercontent.com/wravery/webview2-rs/master/LICENSE
+Fetched: 2026-09-22

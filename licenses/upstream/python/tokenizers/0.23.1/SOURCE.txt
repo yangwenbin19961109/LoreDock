@@ -1,0 +1,2 @@
+﻿URL: https://raw.githubusercontent.com/huggingface/tokenizers/main/LICENSE
+Fetched: 2026-09-22

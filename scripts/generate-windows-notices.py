@@ -17,7 +17,8 @@ from typing import Any
 ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = ROOT / "apps/desktop/src-tauri/Cargo.toml"
 OUTPUT = ROOT / "apps/desktop/src-tauri/target/loredock-third-party-notices"
-LICENSE_NAME = re.compile(r"^(?:LICEN[CS]E|COPYING|NOTICE)(?:[._-]|$)", re.I)
+SUPPLEMENT = ROOT / "licenses/upstream"
+LICENSE_NAME = re.compile(r"^(?:LICEN[CS]E|COPYING|NOTICE)(?:[._-]|$)", re.IGNORECASE)
 TREE_PACKAGE = re.compile(r"^(\S+) v(\S+)")
 
 
@@ -37,13 +38,55 @@ def read_notice_files(root: Path, relative_paths: list[Path]) -> list[tuple[str,
             continue
         if path.stat().st_size > 1_000_000:
             continue
-        notices.append((relative.as_posix(), path.read_text(encoding="utf-8", errors="replace")))
+        notices.append(
+            (relative.as_posix(), path.read_text(encoding="utf-8", errors="replace"))
+        )
     return notices
+
+
+def read_supplement_notices(
+    ecosystem: str, name: str, version: str
+) -> list[tuple[str, str]]:
+    """Read notice texts collected from upstream when a package ships none locally.
+
+    Files live under ``licenses/upstream/{ecosystem}/{name}/{version}/`` and are
+    committed to the repository so the bundle output is reproducible on any host.
+    """
+    directory = SUPPLEMENT / ecosystem / name / version
+    if not directory.is_dir():
+        return []
+    notices: list[tuple[str, str]] = []
+    for path in sorted(directory.iterdir()):
+        if not path.is_file() or path.stat().st_size > 1_000_000:
+            continue
+        notices.append(
+            (
+                f"upstream/{path.name}",
+                path.read_text(encoding="utf-8", errors="replace"),
+            )
+        )
+    return notices
+
+
+def with_supplement(
+    notices: list[tuple[str, str]], ecosystem: str, name: str, version: str
+) -> list[tuple[str, str]]:
+    if notices:
+        return notices
+    return read_supplement_notices(ecosystem, name, version)
 
 
 def cargo_notices() -> tuple[list[str], list[str]]:
     metadata = command_json(
-        ["cargo", "metadata", "--manifest-path", str(MANIFEST), "--format-version", "1", "--locked"]
+        [
+            "cargo",
+            "metadata",
+            "--manifest-path",
+            str(MANIFEST),
+            "--format-version",
+            "1",
+            "--locked",
+        ]
     )
     tree = subprocess.run(
         [
@@ -65,14 +108,20 @@ def cargo_notices() -> tuple[list[str], list[str]]:
         capture_output=True,
         check=True,
     ).stdout
-    included = {match.groups() for line in tree.splitlines() if (match := TREE_PACKAGE.match(line))}
+    included = {
+        match.groups()
+        for line in tree.splitlines()
+        if (match := TREE_PACKAGE.match(line))
+    }
     sections: list[str] = []
     missing: list[str] = []
-    for package in sorted(metadata["packages"], key=lambda item: (item["name"], item["version"])):
+    for package in sorted(
+        metadata["packages"], key=lambda item: (item["name"], item["version"])
+    ):
         name, version = package["name"], package["version"]
-        if (name, version) not in included or not str(package.get("source", "")).startswith(
-            "registry+"
-        ):
+        if (name, version) not in included or not str(
+            package.get("source", "")
+        ).startswith("registry+"):
             continue
         root = Path(package["manifest_path"]).parent
         paths = [
@@ -84,15 +133,21 @@ def cargo_notices() -> tuple[list[str], list[str]]:
             directory = root / directory_name
             if directory.is_dir():
                 paths.extend(
-                    path.relative_to(root) for path in directory.iterdir() if path.is_file()
+                    path.relative_to(root)
+                    for path in directory.iterdir()
+                    if path.is_file()
                 )
         license_file = package.get("license_file")
         if license_file:
             paths.append(Path(license_file))
-        notices = read_notice_files(root, paths)
-        source = package.get("repository") or f"https://crates.io/crates/{name}/{version}"
+        notices = with_supplement(read_notice_files(root, paths), "rust", name, version)
+        source = (
+            package.get("repository") or f"https://crates.io/crates/{name}/{version}"
+        )
         sections.append(
-            format_section("Rust", name, version, package.get("license"), source, notices)
+            format_section(
+                "Rust", name, version, package.get("license"), source, notices
+            )
         )
         if not notices:
             missing.append(f"Rust {name} {version}: no local license or notice text")
@@ -103,28 +158,38 @@ def python_notices() -> tuple[list[str], list[str]]:
     sections: list[str] = []
     missing: list[str] = []
     for distribution in sorted(
-        importlib.metadata.distributions(), key=lambda item: item.metadata.get("Name", "").lower()
+        importlib.metadata.distributions(),
+        key=lambda item: item.metadata.get("Name", "").lower(),
     ):
         name = distribution.metadata.get("Name", "")
         if not name or name == "loredock-core":
             continue
         paths = [
-            Path(str(path)) for path in distribution.files or [] if LICENSE_NAME.match(path.name)
+            Path(str(path))
+            for path in distribution.files or []
+            if LICENSE_NAME.match(path.name)
         ]
         notices: list[tuple[str, str]] = []
         for relative in sorted(paths, key=str):
             path = Path(distribution.locate_file(relative))
             if path.is_file() and path.stat().st_size <= 1_000_000:
                 notices.append(
-                    (relative.as_posix(), path.read_text(encoding="utf-8", errors="replace"))
+                    (
+                        relative.as_posix(),
+                        path.read_text(encoding="utf-8", errors="replace"),
+                    )
                 )
         metadata = distribution.metadata
         source = (
-            metadata.get("Home-page") or f"https://pypi.org/project/{name}/{distribution.version}/"
+            metadata.get("Home-page")
+            or f"https://pypi.org/project/{name}/{distribution.version}/"
         )
         license_name = metadata.get("License-Expression") or metadata.get("License")
+        notices = with_supplement(notices, "python", name, distribution.version)
         sections.append(
-            format_section("Python", name, distribution.version, license_name, source, notices)
+            format_section(
+                "Python", name, distribution.version, license_name, source, notices
+            )
         )
         if not notices:
             missing.append(
@@ -136,7 +201,16 @@ def python_notices() -> tuple[list[str], list[str]]:
 def web_notices() -> tuple[list[str], list[str]]:
     pnpm = "pnpm.cmd" if sys.platform == "win32" else "pnpm"
     workspace = command_json(
-        [pnpm, "--filter", "@loredock/web", "ls", "--prod", "--depth", "Infinity", "--json"]
+        [
+            pnpm,
+            "--filter",
+            "@loredock/web",
+            "ls",
+            "--prod",
+            "--depth",
+            "Infinity",
+            "--json",
+        ]
     )[0]
     packages: dict[tuple[str, str], dict[str, Any]] = {}
 
@@ -162,7 +236,9 @@ def web_notices() -> tuple[list[str], list[str]]:
         repository = package.get("repository")
         source = repository.get("url") if isinstance(repository, dict) else repository
         sections.append(
-            format_section("Web", name, version, package.get("license"), source, notices)
+            format_section(
+                "Web", name, version, package.get("license"), source, notices
+            )
         )
         if not notices:
             missing.append(f"Web {name} {version}: no local license or notice text")
@@ -201,7 +277,9 @@ def main() -> None:
         "LoreDock Windows dependency notices\n"
         "Generated from the locked local dependency trees at packaging time.\n"
         "This inventory may include build-only packages.\n"
-        "See REVIEW_NEEDED.txt for unresolved notice texts.\n\n" + "\n\n".join(sections) + "\n",
+        "See REVIEW_NEEDED.txt for unresolved notice texts.\n\n"
+        + "\n\n".join(sections)
+        + "\n",
         encoding="utf-8",
     )
     (OUTPUT / "REVIEW_NEEDED.txt").write_text(
@@ -210,7 +288,9 @@ def main() -> None:
         + "\n",
         encoding="utf-8",
     )
-    print(f"Collected {len(sections)} dependency entries; {len(missing)} need notice review.")
+    print(
+        f"Collected {len(sections)} dependency entries; {len(missing)} need notice review."
+    )
 
 
 if __name__ == "__main__":

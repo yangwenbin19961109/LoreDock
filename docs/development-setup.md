@@ -58,7 +58,7 @@ pnpm build:desktop:windows
 ```powershell
 pnpm test:installer:windows `
   -InstallerType msi `
-  -CurrentInstaller C:\acceptance\LoreDock_0.2.0_x64_en-US.msi `
+  -CurrentInstaller C:\acceptance\LoreDock_0.1.1_x64_en-US.msi `
   -PreviousInstaller C:\acceptance\LoreDock_0.1.0_x64_en-US.msi `
   -AcknowledgeDisposableMachine
 ```

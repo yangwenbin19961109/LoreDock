@@ -124,5 +124,5 @@ jobs:
             --verify-tag \
             --prerelease \
             --title "${GITHUB_REF_NAME} (Windows preview)" \
-            --notes "Windows x64 preview installers under PolyForm Noncommercial 1.0.0. The installers are unsigned. Clean-VM installation, upgrade and uninstall validation and complete transitive third-party notices are still pending; this is not a formal release."
+            --notes "Windows x64 preview installers under PolyForm Noncommercial 1.0.0. The installers are unsigned. Transitive third-party notices are bundled as licenses/third-party/THIRD_PARTY_NOTICES.txt with an empty REVIEW_NEEDED.txt. Clean-VM installation, upgrade and uninstall validation is still pending; this is not a formal release."
           gh release upload "${GITHUB_REF_NAME}" installers/*

@@ -7,7 +7,7 @@ test('creates and verifies a managed backup from settings', async ({ page }) => 
     const method = route.request().method()
     let data: unknown = {}
     if (path.endsWith('/health'))
-      data = { status: 'ok', service: 'loredock-core', version: '0.1.0', api_version: 'v1' }
+      data = { status: 'ok', service: 'loredock-core', version: '0.1.1', api_version: 'v1' }
     else if (path.endsWith('/settings'))
       data = {
         onboarding_completed: true,

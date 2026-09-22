@@ -28,8 +28,9 @@
 - `selectors 0.36.1` 为 MPL-2.0（servo/stylo 仓库根目录没有单独 LICENSE 文件，README 声明整个 Stylo 项目按 MPL-2.0 授权）。MPL-2.0 §3.3 要求发布者让接收者能够获取许可文本：本包随安装资源提供来自 SPDX license-list 的 MPL-2.0 官方全文（`MPL-2.0.txt`），并保留 crate 元数据中的 `MPL-2.0` 标识，满足该项义务。
 - Python 包 `flatbuffers 25.12.19`（Apache-2.0，来自 google/flatbuffers）、`sqlite-vec 0.1.9`（MIT/Apache-2.0，来自 asg017/sqlite-vec，含 `LICENSE-MIT` 与 `LICENSE-APACHE`）、`tokenizers 0.23.1`（Apache-2.0，来自 huggingface/tokenizers）已取得对应文本。
 - 重新运行后：本机收集 293 个依赖条目，`REVIEW_NEEDED.txt` 为空。新版包内的 `THIRD_PARTY_NOTICES.txt` 包含上述 13 项的 `upstream/` 文本块。
+- 版本升级至 `0.1.1` 后已重建并验证：`LoreDock_0.1.1_x64_en-US.msi` 与 `LoreDock_0.1.1_x64-setup.exe` 内的 `THIRD_PARTY_NOTICES.txt` 含 19 个 `upstream/` 文本块（双许可包各两份）、无 `SOURCE.txt` 来源记录泄漏，`REVIEW_NEEDED.txt` 明确无待核对项；打包 Core 烟雾测试通过。已创建 `v0.1.1-preview.1` tag 触发 CI 打包。
 
-下一步从该状态重建安装资源并创建新预览 tag；不要移动或重写已有 tag，也不要把现有预发布包标记为正式发布。
+不要移动或重写已有 tag，也不要把现有预发布包标记为正式发布。
 
 ## 干净 Windows 虚拟机验收
 
@@ -38,8 +39,8 @@
 在 PowerShell 中分别执行（路径替换为虚拟机内的实际下载位置）：
 
 ```powershell
-./scripts/test-windows-installer.ps1 -InstallerType msi -CurrentInstaller 'C:\Temp\LoreDock_0.1.0_x64_en-US.msi' -AcknowledgeDisposableMachine
-./scripts/test-windows-installer.ps1 -InstallerType nsis -CurrentInstaller 'C:\Temp\LoreDock_0.1.0_x64-setup.exe' -AcknowledgeDisposableMachine
+./scripts/test-windows-installer.ps1 -InstallerType msi -CurrentInstaller 'C:\Temp\LoreDock_0.1.1_x64_en-US.msi' -AcknowledgeDisposableMachine
+./scripts/test-windows-installer.ps1 -InstallerType nsis -CurrentInstaller 'C:\Temp\LoreDock_0.1.1_x64-setup.exe' -AcknowledgeDisposableMachine
 ```
 
-脚本验证安装登记、启动、卸载后数据标记保留及无残留进程。还需人工检查首次启动、主要页面和卸载入口。覆盖升级测试需要**旧版与新版两个不同安装包**；首个 tag 只有一个版本，不得用同版本重装冒充升级验收。得到下一版后，从旧版安装快照分别传入 `-PreviousInstaller` 与 `-CurrentInstaller` 执行脚本，再记录结果、Windows 版本、安装包版本及失败截图。
+脚本验证安装登记、启动、卸载后数据标记保留及无残留进程。还需人工检查首次启动、主要页面和卸载入口。覆盖升级测试需要**旧版与新版两个不同安装包**；现已具备 `v0.1.0-preview.1` 与 `v0.1.1-preview.1` 两个版本，可从旧版安装快照分别传入 `-PreviousInstaller 'C:\Temp\LoreDock_0.1.0_x64_en-US.msi'` 与 `-CurrentInstaller 'C:\Temp\LoreDock_0.1.1_x64_en-US.msi'` 执行脚本，再记录结果、Windows 版本、安装包版本及失败截图。

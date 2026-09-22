@@ -1,8 +1,8 @@
 # LoreDock 当前开发进度
 
-- 记录日期：2026-09-20
+- 记录日期：2026-10-02
 - 当前分支：`main`
-- 当前里程碑：Phase 7 第 9、10 项已完成；第 6 项首个 Windows x64 预览安装包已由 GitHub Actions 构建并附加到预发布页，干净虚拟机安装矩阵与传递依赖声明仍待验收；第 7 项已调整到二期
+- 当前里程碑：Phase 7 第 9、10 项已完成；第 6 项传递依赖声明已补齐并随 `0.1.1` 预览安装包提供，干净虚拟机安装矩阵仍待验收；第 7 项已调整到二期
 
 ## 已完成
 
@@ -47,6 +47,7 @@
 - 2026-09-20 的 `v0.1.0-preview.1` 已通过 GitHub CI；Windows runner 从该 tag 构建 MSI/NSIS 并通过打包 Core 烟雾测试，两个安装包已附加到[预发布页](https://github.com/yangwenbin19961109/LoreDock/releases/tag/v0.1.0-preview.1)。此验证不包含实际安装、升级或卸载；后续 tag 的流水线已接入相同打包步骤。发布前剩余事项与可复现操作见 [Windows 预览版发布核查](windows-preview-release-checklist.md)。
 - 传递依赖声明的下一步已接入 Windows 构建：从锁定的 Windows Rust 树、当前 Python 环境和 Web 生产依赖汇总许可元数据与本地声明文本，随 MSI/NSIS 安装资源提供 `THIRD_PARTY_NOTICES.txt` 和未决项 `REVIEW_NEEDED.txt`。本机全流程重建、打包 Core 烟雾测试及两种安装包脚本包含检查通过；当前仍有 13 项缺少本地声明文本，尚未完成最终许可证复核或创建新 tag，已发布的 `v0.1.0-preview.1` 安装包不受此次代码变更影响。
 - 13 项缺失声明文本已从上游补齐并纳入生成脚本：`licenses/upstream/` 新增 10 个 Rust 包与 3 个 Python 包的许可文本（含 selectors 的 MPL-2.0 官方全文，满足 MPL-2.0 §3.3 随分发提供许可文本的义务；unic 与 sqlite-vec 同时提供 MIT 和 Apache-2.0 两份文本）。脚本以 `core/.venv` 解释器运行时重新收集 293 个条目、`REVIEW_NEEDED.txt` 为空；此前误用全局 Python 会引入无关占位包 `bs4 0.0.2`。核对结论见 [Windows 预览版发布核查](windows-preview-release-checklist.md#上游声明补齐)。
+- 2026-10-02 完成 0.1.1 版本升级与收尾：全部版本号（TS/Python/Rust/JSON/Toml/锁文件/测试）升至 `0.1.1`，`CORE_VERSION` 与 `/version` 握手契约同步；CI 发布说明更新为“传递依赖声明已随包提供，clean-VM 验收仍待完成”。重建的 MSI 为 `LoreDock_0.1.1_x64_en-US.msi`（SHA-256 `0C323FFE253E7703D279D485D6FCE2DA11A47C7D82BE798F0C527C3B7B8B27E5`）、NSIS 为 `LoreDock_0.1.1_x64-setup.exe`（SHA-256 `4A7DE752CC71DE7EFACA734AFB3904364947DF0F8800401FC01154EBE82725E9`）；包内 `THIRD_PARTY_NOTICES.txt` 含 19 个 `upstream/` 文本块、无 `SOURCE.txt` 泄漏，`REVIEW_NEEDED.txt` 明确“无待核对项”，打包态 Core 烟雾测试通过。已创建并推送 `v0.1.1-preview.1` tag 触发 CI；覆盖升级验收现可借助 0.1.0 与 0.1.1 两个版本执行。
 - D-A05 已修复：上传请求不再检查或重建索引；后台执行器在索引锁内完成契约检查，索引提交与 manifest 更新共享同一锁边界，搜索检查与读取也已串行。现场已接收任务均成功，未删除或重建用户资料。新增隔离回归后全量结果为 Core 138 项通过（另 1 项系统测试默认跳过）、Web 45 项和 Playwright 11 项通过；下一步用 10 份以上资料桌面复验首次批量导入。
 - 测试程序保持运行供验收。本次提交和推送不包含安装包、模型、数据库、备份、私人资料、凭据或运行日志。
 

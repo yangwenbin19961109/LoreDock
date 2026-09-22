@@ -25,7 +25,7 @@ def test_health_contract() -> None:
     assert response.json() == {
         "status": "ok",
         "service": "loredock-core",
-        "version": "0.1.0",
+        "version": "0.1.1",
         "api_version": "v1",
     }
 
@@ -38,7 +38,7 @@ def test_version_contract() -> None:
     assert response.status_code == 200
     assert response.json() == {
         "product": "LoreDock",
-        "core_version": "0.1.0",
+        "core_version": "0.1.1",
         "api_version": "v1",
         "app_schema_version": 7,
         "index_schema_version": 3,

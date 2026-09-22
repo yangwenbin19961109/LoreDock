@@ -1,5 +1,5 @@
 export const API_VERSION = 'v1' as const
-export const CORE_VERSION = '0.1.0' as const
+export const CORE_VERSION = '0.1.1' as const
 export const APP_SCHEMA_VERSION = 7 as const
 export const INDEX_SCHEMA_VERSION = 3 as const
 

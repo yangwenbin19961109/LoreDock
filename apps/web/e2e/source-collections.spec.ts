@@ -21,7 +21,7 @@ for (const theme of ['light', 'dark']) {
     await page.route('**/api/v1/**', async (route) => {
       const path = new URL(route.request().url()).pathname
       let data: unknown = {}
-      if (path.endsWith('/health')) data = { status: 'ok', version: '0.1.0' }
+      if (path.endsWith('/health')) data = { status: 'ok', version: '0.1.1' }
       else if (path.endsWith('/settings'))
         data = { onboarding_completed: true, theme, default_search_mode: 'lexical' }
       else if (path.endsWith('/libraries'))

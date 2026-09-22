@@ -51,6 +51,8 @@ def read_supplement_notices(
 
     Files live under ``licenses/upstream/{ecosystem}/{name}/{version}/`` and are
     committed to the repository so the bundle output is reproducible on any host.
+    Every committed file is redistributed notice text except the fixed
+    provenance note ``SOURCE.txt``, which is excluded.
     """
     directory = SUPPLEMENT / ecosystem / name / version
     if not directory.is_dir():
@@ -58,6 +60,8 @@ def read_supplement_notices(
     notices: list[tuple[str, str]] = []
     for path in sorted(directory.iterdir()):
         if not path.is_file() or path.stat().st_size > 1_000_000:
+            continue
+        if path.name == "SOURCE.txt":
             continue
         notices.append(
             (
